@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SKILLS_ROOT="$REPO_ROOT/skills"
+HOST="auto"
+PREFIX_MODE="prefixed"
+CUSTOM_DIR=""
+
+usage() {
+  cat <<'EOF'
+Usage: ./setup [--host codex|claude|all|auto] [--prefix|--no-prefix] [--dir PATH]
+
+Installs RStack skills by symlinking each top-level skill directory into the host's
+skills directory.
+
+Defaults:
+  --host auto      Detect installed hosts and install to any found
+  --prefix         Install as rstack-<skill> to avoid collisions
+
+Examples:
+  ./setup
+  ./setup --host codex
+  ./setup --host claude --no-prefix
+  ./setup --dir /tmp/test-skills
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host)
+      HOST="${2:-}"
+      shift 2
+      ;;
+    --host=*)
+      HOST="${1#*=}"
+      shift
+      ;;
+    --prefix)
+      PREFIX_MODE="prefixed"
+      shift
+      ;;
+    --no-prefix)
+      PREFIX_MODE="plain"
+      shift
+      ;;
+    --dir)
+      CUSTOM_DIR="${2:-}"
+      shift 2
+      ;;
+    --dir=*)
+      CUSTOM_DIR="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$HOST" in
+  auto|all|codex|claude) ;;
+  *)
+    echo "Unsupported host: $HOST" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
+
+list_skills() {
+  find "$SKILLS_ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
+    name="$(basename "$dir")"
+    [ -f "$dir/SKILL.md" ] || continue
+    printf '%s\n' "$name"
+  done | sort
+}
+
+install_into_dir() {
+  target_dir="$1"
+  mkdir -p "$target_dir"
+
+  installed=0
+  while read -r skill; do
+    [ -n "$skill" ] || continue
+    if [ "$PREFIX_MODE" = "prefixed" ]; then
+      target_name="rstack-$skill"
+    else
+      target_name="$skill"
+    fi
+
+    source_dir="$SKILLS_ROOT/$skill"
+    target_path="$target_dir/$target_name"
+
+    if [ -e "$target_path" ] && [ ! -L "$target_path" ]; then
+      echo "Refusing to overwrite non-symlink path: $target_path" >&2
+      exit 1
+    fi
+
+    ln -sfn "$source_dir" "$target_path"
+    installed=$((installed + 1))
+    printf 'linked %-28s -> %s\n' "$target_name" "$source_dir"
+  done <<EOF
+$(list_skills)
+EOF
+
+  echo "Installed $installed skills into $target_dir"
+}
+
+detect_targets() {
+  if [ -n "$CUSTOM_DIR" ]; then
+    printf '%s\n' "$CUSTOM_DIR"
+    return
+  fi
+
+  case "$HOST" in
+    codex)
+      printf '%s\n' "$HOME/.codex/skills"
+      ;;
+    claude)
+      printf '%s\n' "$HOME/.claude/skills"
+      ;;
+    all)
+      printf '%s\n' "$HOME/.codex/skills"
+      printf '%s\n' "$HOME/.claude/skills"
+      ;;
+    auto)
+      found=0
+      if command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
+        printf '%s\n' "$HOME/.codex/skills"
+        found=1
+      fi
+      if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
+        printf '%s\n' "$HOME/.claude/skills"
+        found=1
+      fi
+      if [ "$found" -eq 0 ]; then
+        printf '%s\n' "$HOME/.codex/skills"
+      fi
+      ;;
+  esac
+}
+
+echo "Installing RStack from $REPO_ROOT"
+echo "Host mode: $HOST"
+echo "Skill naming: $([ "$PREFIX_MODE" = "prefixed" ] && echo 'rstack-<skill>' || echo '<skill>')"
+
+while read -r target; do
+  [ -n "$target" ] || continue
+  install_into_dir "$target"
+done <<EOF
+$(detect_targets)
+EOF
