@@ -28,15 +28,15 @@ The copied skills were sanitized from the local `gstack` source:
 Once this repo is public on GitHub, people can install directly without cloning:
 
 ```bash
-npx skills add <owner>/<repo> --list
-npx skills add <owner>/<repo> --skill review --agent codex
-npx skills add <owner>/<repo> --skill office-hours -g --agent claude-code
+npx skills add ridhamdave/rstack --list
+npx skills add ridhamdave/rstack --skill review --agent codex
+npx skills add ridhamdave/rstack --skill office-hours -g --agent claude-code
 ```
 
 Install all skills:
 
 ```bash
-npx skills add <owner>/<repo> --skill '*' --agent codex
+npx skills add ridhamdave/rstack --skill '*' --agent codex
 ```
 
 This repo now uses the standard `skills/` layout so `npx skills` and `skills.sh`
@@ -51,7 +51,7 @@ skill directory.
 1. Clone the repo wherever you keep shared agent skills:
 
 ```bash
-git clone <your-rstack-repo-url> ~/rstack
+git clone https://github.com/ridhamdave/rstack.git ~/rstack
 ```
 
 2. Run the installer:
