@@ -1,0 +1,16 @@
+# RStack lean supported surface.
+# `./setup` installs this set by default.
+
+office-hours
+plan-ceo-review
+plan-eng-review
+design-consultation
+design-review
+ship
+qa
+investigate
+careful
+freeze
+guard
+unfreeze
+setup-deploy

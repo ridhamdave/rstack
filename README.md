@@ -12,7 +12,7 @@ This repo keeps the specialist workflows and skill structure, but strips out the
 
 ## What Is Here
 
-Each skill lives in `skills/<name>/SKILL.md`. The current bootstrap includes planning, review, QA, design, deploy, and safety skills, plus helper skills like browser, cookies, and deploy setup.
+Each skill lives in `skills/<name>/SKILL.md`. The repo still contains the full imported catalog, but RStack now treats a smaller set as the default supported surface.
 
 The copied skills were sanitized from the local `gstack` source:
 
@@ -61,11 +61,27 @@ cd ~/rstack
 ./setup
 ```
 
-By default this installs symlinks into detected host skill directories and names
-them `rstack-<skill>` to avoid collisions.
+By default this installs the lean supported set into detected host skill
+directories and names them `rstack-<skill>` to avoid collisions.
 
 Unlike `gstack`, RStack's setup does not build binaries, generate host-specific
 skill variants, or maintain telemetry/config state. It only installs the skills.
+
+Lean supported set:
+
+- `office-hours`
+- `plan-ceo-review`
+- `plan-eng-review`
+- `design-consultation`
+- `design-review`
+- `ship`
+- `qa`
+- `investigate`
+- `careful`
+- `freeze`
+- `guard`
+- `unfreeze`
+- `setup-deploy`
 
 Examples:
 
@@ -73,6 +89,7 @@ Examples:
 ./setup --host codex
 ./setup --host claude
 ./setup --host all
+./setup --all-skills
 ./setup --host codex --no-prefix
 ```
 
@@ -81,8 +98,11 @@ Targets:
 - Codex: `~/.codex/skills/`
 - Claude: `~/.claude/skills/`
 
-If you use `--no-prefix`, skills install as plain names like `review` and `qa`.
-Otherwise they install as `rstack-review`, `rstack-qa`, and so on.
+If you use `--no-prefix`, skills install as plain names like `qa` and `ship`.
+Otherwise they install as `rstack-qa`, `rstack-ship`, and so on.
+
+Use `--all-skills` only if you want the full imported catalog, including sidecar
+or legacy workflows that are not part of the lean default surface.
 
 ## Run
 
@@ -147,11 +167,14 @@ This is intentionally markdown-first. Some skills still mention helper commands 
 - collaboration scratch files can go under `.context/`
 - this repo is the fork source, not a generated output
 
-## Next Review Pass
+## Lean Default
 
-The fork is now self-contained, but there is still real cleanup worth doing skill-by-skill:
+RStack keeps the full imported skill catalog in-repo for reference, but the
+default install surface is intentionally smaller:
 
-1. remap browser-heavy skills away from custom binary assumptions
-2. decide whether local memory skills like `learn` and `checkpoint` stay
-3. tighten host-specific instructions for Codex, Claude, and other agents
-4. rewrite descriptions and examples where they still carry `gstack`-era assumptions
+- product thinking: `office-hours`, `plan-ceo-review`, `plan-eng-review`
+- design: `design-consultation`, `design-review`
+- execution: `qa`, `ship`, `investigate`
+- safety/helpers: `careful`, `freeze`, `guard`, `unfreeze`, `setup-deploy`
+
+Everything else is currently extra inventory, not part of the default public surface.

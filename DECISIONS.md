@@ -25,6 +25,28 @@ These decisions were made in the first fork pass.
 - shared generated preamble replaced with a small RStack runtime block
 - `office-hours` closing section rewritten to remove YC application and promotional copy
 - skill files now default to host-native fallback behavior when custom helpers are missing
+- default install surface reduced to a lean supported set rather than every imported skill
+
+## Lean Supported Set
+
+These skills are the default public surface and the default `./setup` install set:
+
+- `office-hours`
+- `plan-ceo-review`
+- `plan-eng-review`
+- `design-consultation`
+- `design-review`
+- `ship`
+- `qa`
+- `investigate`
+- `careful`
+- `freeze`
+- `guard`
+- `unfreeze`
+- `setup-deploy`
+
+The remaining `skills/*` directories stay in the repo as extra inventory for now,
+but are not treated as part of the lean core.
 
 ## Known Rough Edges
 

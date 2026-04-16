@@ -6,10 +6,12 @@ SKILLS_ROOT="$REPO_ROOT/skills"
 HOST="auto"
 PREFIX_MODE="prefixed"
 CUSTOM_DIR=""
+INSTALL_MODE="lean"
+SUPPORTED_SKILLS_FILE="$REPO_ROOT/config/supported-skills.txt"
 
 usage() {
   cat <<'EOF'
-Usage: ./setup [--host codex|claude|all|auto] [--prefix|--no-prefix] [--dir PATH]
+Usage: ./setup [--host codex|claude|all|auto] [--prefix|--no-prefix] [--all-skills] [--dir PATH]
 
 Installs RStack skills by symlinking each top-level skill directory into the host's
 skills directory.
@@ -17,11 +19,13 @@ skills directory.
 Defaults:
   --host auto      Detect installed hosts and install to any found
   --prefix         Install as rstack-<skill> to avoid collisions
+  lean mode        Install only the supported core/helper set by default
 
 Examples:
   ./setup
   ./setup --host codex
   ./setup --host claude --no-prefix
+  ./setup --all-skills
   ./setup --dir /tmp/test-skills
 EOF
 }
@@ -52,6 +56,10 @@ while [ $# -gt 0 ]; do
       CUSTOM_DIR="${1#*=}"
       shift
       ;;
+    --all-skills)
+      INSTALL_MODE="all"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -74,11 +82,53 @@ case "$HOST" in
 esac
 
 list_skills() {
+  if [ "$INSTALL_MODE" = "lean" ]; then
+    if [ ! -f "$SUPPORTED_SKILLS_FILE" ]; then
+      echo "Missing supported skills file: $SUPPORTED_SKILLS_FILE" >&2
+      exit 1
+    fi
+    while read -r skill; do
+      case "$skill" in
+        ''|\#*) continue ;;
+      esac
+      if [ ! -f "$SKILLS_ROOT/$skill/SKILL.md" ]; then
+        echo "Configured supported skill missing from repo: $skill" >&2
+        exit 1
+      fi
+      printf '%s\n' "$skill"
+    done < "$SUPPORTED_SKILLS_FILE"
+    return
+  fi
+
   find "$SKILLS_ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
     name="$(basename "$dir")"
     [ -f "$dir/SKILL.md" ] || continue
     printf '%s\n' "$name"
   done | sort
+}
+
+remove_unsupported_links() {
+  target_dir="$1"
+  [ -d "$target_dir" ] || return 0
+  [ "$INSTALL_MODE" = "lean" ] || return 0
+
+  tmp_supported="$(mktemp)"
+  list_skills > "$tmp_supported"
+
+  find "$target_dir" -mindepth 1 -maxdepth 1 -type l | while read -r link_path; do
+    target_name="$(basename "$link_path")"
+    skill_name="$target_name"
+    case "$skill_name" in
+      rstack-*) skill_name="${skill_name#rstack-}" ;;
+    esac
+
+    if ! grep -qx "$skill_name" "$tmp_supported"; then
+      rm -f "$link_path"
+      printf 'removed %-27s (not in lean supported set)\n' "$target_name"
+    fi
+  done
+
+  rm -f "$tmp_supported"
 }
 
 install_into_dir() {
@@ -149,9 +199,11 @@ detect_targets() {
 echo "Installing RStack from $REPO_ROOT"
 echo "Host mode: $HOST"
 echo "Skill naming: $([ "$PREFIX_MODE" = "prefixed" ] && echo 'rstack-<skill>' || echo '<skill>')"
+echo "Install surface: $([ "$INSTALL_MODE" = "lean" ] && echo 'lean supported set' || echo 'all skills')"
 
 while read -r target; do
   [ -n "$target" ] || continue
+  remove_unsupported_links "$target"
   install_into_dir "$target"
 done <<EOF
 $(detect_targets)
