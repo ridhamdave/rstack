@@ -1,8 +1,8 @@
 # RStack
 
-Inspired by and forked from GStack by Garry Tan, RStack keeps the specialist markdown workflow but makes it leaner, anonymous, telemetry-free, and easier to reuse across projects without generator or update machinery.
+RStack is a markdown-first skill pack built to stay lean, anonymous, telemetry-free, and easy to reuse across projects without generator or update machinery.
 
-This repo keeps the specialist workflows and skill structure, but strips out the parts that made `gstack` feel productized around one author or one org:
+This repo keeps the specialist workflow and skill structure while stripping out productized repo machinery:
 
 - No telemetry
 - No analytics sync
@@ -14,11 +14,11 @@ This repo keeps the specialist workflows and skill structure, but strips out the
 
 Each skill lives in `skills/<name>/SKILL.md`. The repo still contains the full imported catalog, but RStack now treats a smaller set as the default supported surface.
 
-The copied skills were sanitized from the local `gstack` source:
+The imported skills were sanitized for RStack:
 
 - shared telemetry and upgrade wrappers removed
 - common runtime replaced with a small RStack runtime block
-- `open-gstack-browser` renamed to `open-browser`
+- `open-browser` standardized as the browser entrypoint
 - `office-hours` stripped of YC application and founder-marketing sections
 
 ## Install
@@ -44,9 +44,8 @@ can discover it cleanly.
 
 ### Local install with `./setup`
 
-This is the path closest to how `gstack` handled installation: clone once, then
-run a repo-owned setup script that installs the skill collection into your host's
-skill directory.
+Clone once, then run a repo-owned setup script that installs the skill collection
+into your host's skill directory.
 
 1. Clone the repo wherever you keep shared agent skills:
 
@@ -64,8 +63,8 @@ cd ~/rstack
 By default this installs the lean supported set into detected host skill
 directories and names them `rstack-<skill>` to avoid collisions.
 
-Unlike `gstack`, RStack's setup does not build binaries, generate host-specific
-skill variants, or maintain telemetry/config state. It only installs the skills.
+RStack's setup does not build binaries, generate host-specific skill variants,
+or maintain telemetry/config state. It only installs the skills.
 
 Lean supported set:
 
@@ -154,7 +153,9 @@ up and rank there.
 
 ## Current Shape
 
-This is intentionally markdown-first. Some skills still mention helper commands or browser flows that originally depended on custom `gstack` binaries. For now, treat those as playbooks:
+This is intentionally markdown-first. Some skills still mention helper commands
+or browser flows that may depend on optional local tooling. For now, treat those
+as playbooks:
 
 - if the helper exists, use it
 - if it does not, substitute the closest host-native tool
@@ -178,3 +179,7 @@ default install surface is intentionally smaller:
 - safety/helpers: `careful`, `freeze`, `guard`, `unfreeze`, `setup-deploy`
 
 Everything else is currently extra inventory, not part of the default public surface.
+
+## Reference
+
+RStack was informed by and takes inspiration from GStack by Garry Tan.

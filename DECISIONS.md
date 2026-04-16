@@ -8,7 +8,7 @@ These decisions were made in the first fork pass.
 
 - top-level skill-per-directory structure
 - markdown prompt files as the source of truth
-- the broad specialist lineup from the local `gstack` source
+- the broad specialist lineup imported into this repo
 
 ## Removed
 
@@ -17,11 +17,11 @@ These decisions were made in the first fork pass.
 - remote sync assumptions
 - upgrade-check wrappers
 - author and YC-specific branding in the shared runtime
-- the `gstack-upgrade` skill
+- repo-vendored legacy source trees
 
 ## Changed
 
-- `open-gstack-browser` renamed to `open-browser`
+- browser entrypoint standardized as `open-browser`
 - shared generated preamble replaced with a small RStack runtime block
 - `office-hours` closing section rewritten to remove YC application and promotional copy
 - skill files now default to host-native fallback behavior when custom helpers are missing
