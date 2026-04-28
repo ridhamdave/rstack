@@ -12,13 +12,12 @@ This repo keeps the specialist workflow and skill structure while stripping out 
 
 ## What Is Here
 
-Each skill lives in `skills/<name>/SKILL.md`. The repo still contains the full imported catalog, but RStack now treats a smaller set as the default supported surface.
+Each skill lives in `skills/<name>/SKILL.md`. RStack only ships the lean supported surface.
 
 The imported skills were sanitized for RStack:
 
 - shared telemetry and upgrade wrappers removed
 - common runtime replaced with a small RStack runtime block
-- `open-browser` standardized as the browser entrypoint
 - `office-hours` stripped of YC application and founder-marketing sections
 
 ## Install
@@ -29,14 +28,8 @@ Once this repo is public on GitHub, people can install directly without cloning:
 
 ```bash
 npx skills add ridhamdave/rstack --list
-npx skills add ridhamdave/rstack --skill review --agent codex
+npx skills add ridhamdave/rstack --skill qa --agent codex
 npx skills add ridhamdave/rstack --skill office-hours -g --agent claude-code
-```
-
-Install all skills:
-
-```bash
-npx skills add ridhamdave/rstack --skill '*' --agent codex
 ```
 
 This repo now uses the standard `skills/` layout so `npx skills` and `skills.sh`
@@ -60,8 +53,8 @@ cd ~/rstack
 ./setup
 ```
 
-By default this installs the lean supported set into detected host skill
-directories and names them `rstack-<skill>` to avoid collisions.
+This installs the shipped lean skill set into detected host skill directories
+and names them `rstack-<skill>` to avoid collisions.
 
 RStack's setup does not build binaries, generate host-specific skill variants,
 or maintain telemetry/config state. It only installs the skills.
@@ -88,7 +81,6 @@ Examples:
 ./setup --host codex
 ./setup --host claude
 ./setup --host all
-./setup --all-skills
 ./setup --host codex --no-prefix
 ```
 
@@ -100,9 +92,6 @@ Targets:
 If you use `--no-prefix`, skills install as plain names like `qa` and `ship`.
 Otherwise they install as `rstack-qa`, `rstack-ship`, and so on.
 
-Use `--all-skills` only if you want the full imported catalog, including sidecar
-or legacy workflows that are not part of the lean default surface.
-
 ## Run
 
 Invoke the workflow by skill name, then follow that skill's instructions.
@@ -112,9 +101,9 @@ Examples:
 ```text
 /rstack-office-hours
 /rstack-plan-eng-review
-/rstack-review
 /rstack-qa
 /rstack-ship
+/rstack-design-review
 ```
 
 If you installed with `--no-prefix`, use the plain names instead:
@@ -122,9 +111,9 @@ If you installed with `--no-prefix`, use the plain names instead:
 ```text
 /office-hours
 /plan-eng-review
-/review
 /qa
 /ship
+/design-review
 ```
 
 If your host does not support slash commands directly, open the relevant file and
@@ -132,8 +121,8 @@ use it as the operating prompt:
 
 ```text
 ~/rstack/skills/office-hours/SKILL.md
-~/rstack/skills/review/SKILL.md
 ~/rstack/skills/qa/SKILL.md
+~/rstack/skills/design-review/SKILL.md
 ```
 
 ## Listing On skills.sh
@@ -168,17 +157,14 @@ as playbooks:
 - collaboration scratch files can go under `.context/`
 - this repo is the fork source, not a generated output
 
-## Lean Default
+## Skill Set
 
-RStack keeps the full imported skill catalog in-repo for reference, but the
-default install surface is intentionally smaller:
+RStack ships an intentionally small default surface:
 
 - product thinking: `office-hours`, `plan-ceo-review`, `plan-eng-review`
 - design: `design-consultation`, `design-review`
 - execution: `qa`, `ship`, `investigate`
 - safety/helpers: `careful`, `freeze`, `guard`, `unfreeze`, `setup-deploy`
-
-Everything else is currently extra inventory, not part of the default public surface.
 
 ## Reference
 

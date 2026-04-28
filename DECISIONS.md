@@ -8,7 +8,7 @@ These decisions were made in the first fork pass.
 
 - top-level skill-per-directory structure
 - markdown prompt files as the source of truth
-- the broad specialist lineup imported into this repo
+- a small, high-signal core skill set
 
 ## Removed
 
@@ -21,11 +21,10 @@ These decisions were made in the first fork pass.
 
 ## Changed
 
-- browser entrypoint standardized as `open-browser`
 - shared generated preamble replaced with a small RStack runtime block
 - `office-hours` closing section rewritten to remove YC application and promotional copy
 - skill files now default to host-native fallback behavior when custom helpers are missing
-- default install surface reduced to a lean supported set rather than every imported skill
+- repo scope reduced to the lean supported set rather than every imported skill
 
 ## Lean Supported Set
 
@@ -45,14 +44,11 @@ These skills are the default public surface and the default `./setup` install se
 - `unfreeze`
 - `setup-deploy`
 
-The remaining `skills/*` directories stay in the repo as extra inventory for now,
-but are not treated as part of the lean core.
-
 ## Known Rough Edges
 
 - several browser-oriented skills still assume a custom `browse` binary path
 - some skills still refer to optional local state under `.rstack/`
-- `learn`, `checkpoint`, and `health` may be too stateful for the final lean version
+- some shipped skills still reference companion workflows that are no longer in the lean set
 - host-specific installation instructions have not been rewritten yet
 
 ## Intent

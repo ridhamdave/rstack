@@ -19,7 +19,7 @@ RStack is a markdown-first skill pack. Each skill lives in `skills/<name>/SKILL.
 
 ## Supported Skills
 
-These are the lean default skills RStack should prefer and install by default:
+RStack only ships this lean skill set:
 
 - `office-hours`
 - `plan-ceo-review`
@@ -34,6 +34,3 @@ These are the lean default skills RStack should prefer and install by default:
 - `guard`
 - `unfreeze`
 - `setup-deploy`
-
-Other directories under `skills/` are extra workflows kept in-repo for reference,
-but they are not the default public surface.
