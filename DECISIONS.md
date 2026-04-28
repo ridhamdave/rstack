@@ -18,6 +18,7 @@ These decisions were made in the first fork pass.
 - upgrade-check wrappers
 - author and YC-specific branding in the shared runtime
 - repo-vendored legacy source trees
+- automatic vendor-specific review dispatch
 
 ## Changed
 
@@ -25,6 +26,7 @@ These decisions were made in the first fork pass.
 - `office-hours` closing section rewritten to remove YC application and promotional copy
 - skill files now default to host-native fallback behavior when custom helpers are missing
 - repo scope reduced to the lean supported set rather than every imported skill
+- persisted workflow state consolidated under `~/.rstack/`
 
 ## Lean Supported Set
 
@@ -47,9 +49,8 @@ These skills are the default public surface and the default `./setup` install se
 ## Known Rough Edges
 
 - several browser-oriented skills still assume a custom `browse` binary path
-- some skills still refer to optional local state under `.rstack/`
 - some shipped skills still reference companion workflows that are no longer in the lean set
-- host-specific installation instructions have not been rewritten yet
+- host-specific installation instructions are still partially host-aware by necessity
 
 ## Intent
 

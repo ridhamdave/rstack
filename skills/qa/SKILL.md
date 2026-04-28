@@ -34,6 +34,8 @@ Name files, commands, and risks. Avoid hype, filler, and hidden assumptions.
 RStack is markdown-first. No telemetry, no analytics, no remote sync, no hidden upgrade flow.
 Use repo-local context first. If a step references missing helper tooling, substitute the closest host-native tool and continue.
 Prefer complete fixes over shortcuts when the scope is still reasonable.
+Persist all workflow state under `~/.rstack/` only. Do not write scratch or state files to `.rstack/`, `.context/`, or `/tmp/`.
+Never invoke external reviewer CLIs, subagents, or browser-control helpers automatically. Offer them explicitly, let the user choose the provider, and default to the current host CLI only if the user approves.
 End every workflow with one of: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
 
 ## Step 0: Detect platform and base branch
@@ -87,8 +89,8 @@ You are a QA engineer AND a bug-fix engineer. Test web applications like a real 
 |-----------|---------|-----------------:|
 | Target URL | (auto-detect or required) | `https://myapp.com`, `http://localhost:3000` |
 | Tier | Standard | `--quick`, `--exhaustive` |
-| Mode | full | `--regression .rstack/qa-reports/baseline.json` |
-| Output dir | `.rstack/qa-reports/` | `Output to /tmp/qa` |
+| Mode | full | `--regression ~/.rstack/qa-reports/baseline.json` |
+| Output dir | `~/.rstack/qa-reports/` | `Output to ~/.rstack/tmp/qa` |
 | Scope | Full app (or diff-scoped) | `Focus on the billing page` |
 | Auth | None | `Sign in to user@example.com`, `Import cookies from cookies.json` |
 
@@ -184,7 +186,7 @@ setopt +o nomatch 2>/dev/null || true  # zsh compat
 ls jest.config.* vitest.config.* playwright.config.* .rspec pytest.ini pyproject.toml phpunit.xml 2>/dev/null
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 # Check opt-out marker
-[ -f .rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
+[ -f ~/.rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
 ```
 
 **If test framework detected** (config files or test directories found):
@@ -197,7 +199,7 @@ Store conventions as prose context for use in Phase 8e.5 or Step 3.4. **Skip the
 **If NO runtime detected** (no config files found): Use AskUserQuestion:
 "I couldn't detect your project's language. What runtime are you using?"
 Options: A) Node.js/TypeScript B) Ruby/Rails C) Python D) Go E) Rust F) PHP G) Elixir H) This project doesn't need tests.
-If user picks H → write `.rstack/no-test-bootstrap` and continue without tests.
+If user picks H → write `~/.rstack/no-test-bootstrap` and continue without tests.
 
 **If runtime detected but no test framework — bootstrap:**
 
@@ -229,7 +231,7 @@ B) [Alternative] — [rationale]. Includes: [packages]
 C) Skip — don't set up testing right now
 RECOMMENDATION: Choose A because [reason based on project context]"
 
-If user picks C → write `.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `.rstack/no-test-bootstrap` and re-run." Continue without tests.
+If user picks C → write `~/.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `~/.rstack/no-test-bootstrap` and re-run." Continue without tests.
 
 If multiple runtimes detected (monorepo) → ask which runtime to set up first, with option to do both sequentially.
 
@@ -320,7 +322,7 @@ Only commit if there are changes. Stage all bootstrap files (config, test direct
 **Create output directories:**
 
 ```bash
-mkdir -p .rstack/qa-reports/screenshots
+mkdir -p ~/.rstack/qa-reports/screenshots
 ```
 
 ---
@@ -627,7 +629,7 @@ Record baseline health score at end of Phase 6.
 ## Output Structure
 
 ```
-.rstack/qa-reports/
+~/.rstack/qa-reports/
 ├── qa-report-{domain}-{YYYY-MM-DD}.md    # Structured report
 ├── screenshots/
 │   ├── initial.png                        # Landing page annotated screenshot
@@ -732,7 +734,7 @@ The test MUST:
   ```
   // Regression: ISSUE-NNN — {what broke}
   // Found by /qa on {YYYY-MM-DD}
-  // Report: .rstack/qa-reports/qa-report-{domain}-{date}.md
+  // Report: ~/.rstack/qa-reports/qa-report-{domain}-{date}.md
   ```
 
 Test type decision:
@@ -792,7 +794,7 @@ After all fixes are applied:
 
 Write the report to both local and project-scoped locations:
 
-**Local:** `.rstack/qa-reports/qa-report-{domain}-{YYYY-MM-DD}.md`
+**Local:** `~/.rstack/qa-reports/qa-report-{domain}-{YYYY-MM-DD}.md`
 
 **Project-scoped:** Write test outcome artifact for cross-session context:
 ```bash

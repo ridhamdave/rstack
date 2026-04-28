@@ -32,6 +32,8 @@ Name files, commands, and risks. Avoid hype, filler, and hidden assumptions.
 RStack is markdown-first. No telemetry, no analytics, no remote sync, no hidden upgrade flow.
 Use repo-local context first. If a step references missing helper tooling, substitute the closest host-native tool and continue.
 Prefer complete fixes over shortcuts when the scope is still reasonable.
+Persist all workflow state under `~/.rstack/` only. Do not write scratch or state files to `.rstack/`, `.context/`, or `/tmp/`.
+Never invoke external reviewer CLIs, subagents, or browser-control helpers automatically. Offer them explicitly, let the user choose the provider, and default to the current host CLI only if the user approves.
 End every workflow with one of: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
 
 ## Setup
@@ -138,7 +140,7 @@ setopt +o nomatch 2>/dev/null || true  # zsh compat
 ls jest.config.* vitest.config.* playwright.config.* .rspec pytest.ini pyproject.toml phpunit.xml 2>/dev/null
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 # Check opt-out marker
-[ -f .rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
+[ -f ~/.rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
 ```
 
 **If test framework detected** (config files or test directories found):
@@ -151,7 +153,7 @@ Store conventions as prose context for use in Phase 8e.5 or Step 3.4. **Skip the
 **If NO runtime detected** (no config files found): Use AskUserQuestion:
 "I couldn't detect your project's language. What runtime are you using?"
 Options: A) Node.js/TypeScript B) Ruby/Rails C) Python D) Go E) Rust F) PHP G) Elixir H) This project doesn't need tests.
-If user picks H → write `.rstack/no-test-bootstrap` and continue without tests.
+If user picks H → write `~/.rstack/no-test-bootstrap` and continue without tests.
 
 **If runtime detected but no test framework — bootstrap:**
 
@@ -183,7 +185,7 @@ B) [Alternative] — [rationale]. Includes: [packages]
 C) Skip — don't set up testing right now
 RECOMMENDATION: Choose A because [reason based on project context]"
 
-If user picks C → write `.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `.rstack/no-test-bootstrap` and re-run." Continue without tests.
+If user picks C → write `~/.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `~/.rstack/no-test-bootstrap` and re-run." Continue without tests.
 
 If multiple runtimes detected (monorepo) → ask which runtime to set up first, with option to do both sequentially.
 
@@ -721,7 +723,7 @@ Compare screenshots and observations across pages for:
 
 ### Output Locations
 
-**Local:** `.rstack/design-reports/design-audit-{domain}-{YYYY-MM-DD}.md`
+**Local:** `~/.rstack/design-reports/design-audit-{domain}-{YYYY-MM-DD}.md`
 
 **Project-scoped:**
 ```bash
@@ -878,7 +880,7 @@ Tie everything to user goals and product objectives. Always suggest specific imp
 9. Generic hero copy ("Welcome to [X]", "Unlock the power of...", "Your all-in-one solution for...")
 10. Cookie-cutter section rhythm (hero → 3 features → testimonials → pricing → CTA, every section same height)
 
-Source: [OpenAI "Designing Delightful Frontends with GPT-5.4"](https://developers.openai.com/blog/designing-delightful-frontends-with-gpt-5-4) (Mar 2026) + rstack design methodology.
+Source: rstack design methodology and general frontend design review heuristics.
 
 Record baseline design score and AI slop score at end of Phase 6.
 
@@ -904,87 +906,36 @@ Record baseline design score and AI slop score at end of Phase 6.
 
 ---
 
-## Design Outside Voices (parallel)
+## Design Outside Voices (optional)
 
-**Automatic:** Outside voices run automatically when Codex is available. No opt-in needed.
+Do not run an outside voice automatically. Offer one only if the user opts in.
 
-**Check Codex availability:**
-```bash
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-```
+Use AskUserQuestion:
+> "Want an outside design audit from a local reviewer CLI you choose?"
+>
+> A) Use the current CLI
+> B) Use another installed local reviewer CLI
+> C) No — proceed without
 
-**If Codex is available**, launch both voices simultaneously:
-
-1. **Codex design voice** (via Bash):
-```bash
-TMPERR_DESIGN=$(mktemp /tmp/codex-design-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "Review the frontend source code in this repo. Evaluate against these design hard rules:
-- Spacing: systematic (design tokens / CSS variables) or magic numbers?
-- Typography: expressive purposeful fonts or default stacks?
-- Color: CSS variables with defined system, or hardcoded hex scattered?
-- Responsive: breakpoints defined? calc(100svh - header) for heroes? Mobile tested?
-- A11y: ARIA landmarks, alt text, contrast ratios, 44px touch targets?
-- Motion: 2-3 intentional animations, or zero / ornamental only?
-- Cards: used only when card IS the interaction? No decorative card grids?
-
-First classify as MARKETING/LANDING PAGE vs APP UI vs HYBRID, then apply matching rules.
-
-LITMUS CHECKS — answer YES/NO:
-1. Brand/product unmistakable in first screen?
-2. One strong visual anchor present?
-3. Page understandable by scanning headlines only?
-4. Each section has one job?
-5. Are cards actually necessary?
-6. Does motion improve hierarchy or atmosphere?
-7. Would design feel premium with all decorative shadows removed?
-
-HARD REJECTION — flag if ANY apply:
-1. Generic SaaS card grid as first impression
-2. Beautiful image with weak brand
-3. Strong headline with no clear action
-4. Busy imagery behind text
-5. Sections repeating same mood statement
-6. Carousel with no narrative purpose
-7. App UI made of stacked cards instead of layout
-
-Be specific. Reference file:line for every finding." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached 2>"$TMPERR_DESIGN"
-```
-Use a 5-minute timeout (`timeout: 300000`). After the command completes, read stderr:
-```bash
-cat "$TMPERR_DESIGN" && rm -f "$TMPERR_DESIGN"
-```
-
-2. **Claude design subagent** (via Agent tool):
-Dispatch a subagent with this prompt:
-"Review the frontend source code in this repo. You are an independent senior product designer doing a source-code design audit. Focus on CONSISTENCY PATTERNS across files rather than individual violations:
-- Are spacing values systematic across the codebase?
-- Is there ONE color system or scattered approaches?
-- Do responsive breakpoints follow a consistent set?
-- Is the accessibility approach consistent or spotty?
-
-For each finding: what's wrong, severity (critical/high/medium), and the file:line."
-
-**Error handling (all non-blocking):**
-- **Auth failure:** If stderr contains "auth", "login", "unauthorized", or "API key": "Codex authentication failed. Run `codex login` to authenticate."
-- **Timeout:** "Codex timed out after 5 minutes."
-- **Empty response:** "Codex returned no response."
-- On any Codex error: proceed with Claude subagent output only, tagged `[single-model]`.
-- If Claude subagent also fails: "Outside voices unavailable — continuing with primary review."
-
-Present Codex output under a `CODEX SAYS (design source audit):` header.
-Present subagent output under a `CLAUDE SUBAGENT (design consistency):` header.
+If the user chooses A or B:
+1. Write a prompt to `~/.rstack/tmp/design-review-outside-voice-prompt.txt` asking for a source-code design audit covering spacing, typography, color, responsive behavior, accessibility, motion, and card usage.
+2. If the user chose B, ask them which local command to run. If they chose A, use the current authenticated CLI.
+3. Run only the user-approved local command.
+4. Write stderr to `~/.rstack/tmp/design-review-outside-voice-stderr.txt`.
+5. Present the full output under `OUTSIDE DESIGN VOICE (<provider>):`.
+6. On auth failure, timeout, or empty response: note the failure and continue. Never auto-fallback to another provider. Never dispatch another agent.
 
 **Synthesis — Litmus scorecard:**
 
-Use the same scorecard format as /plan-design-review (shown above). Fill in from both outputs.
-Merge findings into the triage with `[codex]` / `[subagent]` / `[cross-model]` tags.
+Use the same scorecard format as /plan-design-review (shown above). Fill in from your findings and any optional outside voice output.
+Merge findings into the triage with `[primary]` / `[outside-voice]` / `[shared]` tags.
 
 **Log the result:**
 ```bash
-~/.claude/skills/rstack/bin/rstack-review-log '{"skill":"design-outside-voices","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}'
+mkdir -p ~/.rstack
+echo '{"skill":"design-outside-voices","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}' >> ~/.rstack/review-log.jsonl
 ```
-Replace STATUS with "clean" or "issues_found", SOURCE with "codex+subagent", "codex-only", "subagent-only", or "unavailable".
+Replace STATUS with "clean" or "issues_found", SOURCE with the provider label the user chose or "unavailable".
 
 ## Phase 7: Triage
 

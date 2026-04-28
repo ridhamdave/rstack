@@ -10,7 +10,7 @@ SUPPORTED_SKILLS_FILE="$REPO_ROOT/config/supported-skills.txt"
 
 usage() {
   cat <<'EOF'
-Usage: ./setup [--host codex|claude|all|auto] [--prefix|--no-prefix] [--dir PATH]
+Usage: ./setup [--host claude|codex|all|auto] [--prefix|--no-prefix] [--dir PATH]
 
 Installs RStack skills by symlinking each top-level skill directory into the host's
 skills directory.
@@ -22,8 +22,8 @@ Defaults:
 
 Examples:
   ./setup
-  ./setup --host codex
   ./setup --host claude --no-prefix
+  ./setup --host codex
   ./setup --dir /tmp/test-skills
 EOF
 }
@@ -67,7 +67,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$HOST" in
-  auto|all|codex|claude) ;;
+  auto|all|claude|codex) ;;
   *)
     echo "Unsupported host: $HOST" >&2
     usage >&2
@@ -166,16 +166,17 @@ detect_targets() {
       ;;
     auto)
       found=0
-      if command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
-        printf '%s\n' "$HOME/.codex/skills"
-        found=1
-      fi
       if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
         printf '%s\n' "$HOME/.claude/skills"
         found=1
       fi
-      if [ "$found" -eq 0 ]; then
+      if command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
         printf '%s\n' "$HOME/.codex/skills"
+        found=1
+      fi
+      if [ "$found" -eq 0 ]; then
+        echo "No supported host directory detected. Use --dir to install into a custom location." >&2
+        exit 1
       fi
       ;;
   esac
