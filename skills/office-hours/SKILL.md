@@ -36,6 +36,8 @@ Name files, commands, and risks. Avoid hype, filler, and hidden assumptions.
 RStack is markdown-first. No telemetry, no analytics, no remote sync, no hidden upgrade flow.
 Use repo-local context first. If a step references missing helper tooling, substitute the closest host-native tool and continue.
 Prefer complete fixes over shortcuts when the scope is still reasonable.
+Persist all workflow state under `~/.rstack/` only. Do not write scratch or state files to `.rstack/`, `.context/`, or `/tmp/`.
+Never invoke external reviewer CLIs, subagents, or browser-control helpers automatically. Offer them explicitly, let the user choose the provider, and default to the current host CLI only if the user approves.
 End every workflow with one of: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
 
 ## SETUP (run this check BEFORE any browse command)
@@ -373,24 +375,25 @@ Use AskUserQuestion to confirm. If the user disagrees with a premise, revise und
 
 ---
 
-## Phase 3.5: Cross-Model Second Opinion (optional)
+## Phase 3.5: Optional Local Second Opinion
 
-**Binary check first:**
+Offer a second opinion only if the user explicitly opts in. Do not auto-run any
+external review command and do not auto-fallback to another provider.
 
-```bash
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-```
+Use AskUserQuestion:
 
-Use AskUserQuestion (regardless of codex availability):
+> Want a second opinion from an independent AI perspective? It should come from a
+> local reviewer CLI you choose, and it will only receive the structured summary we
+> prepare here.
+>
+> A) Use the current CLI
+> B) Use another installed local reviewer CLI
+> C) Skip
 
-> Want a second opinion from an independent AI perspective? It will review your problem statement, key answers, premises, and any landscape findings from this session without having seen this conversation — it gets a structured summary. Usually takes 2-5 minutes.
-> A) Yes, get a second opinion
-> B) No, proceed to alternatives
+If C: skip Phase 3.5 entirely. Remember that the second opinion did NOT run
+(affects the design doc, founder signals, and Phase 4 below).
 
-If B: skip Phase 3.5 entirely. Remember that the second opinion did NOT run (affects design doc, founder signals, and Phase 4 below).
-
-**If A: Run the Codex cold read.**
-
+If A or B:
 1. Assemble a structured context block from Phases 1-3:
    - Mode (Startup or Builder)
    - Problem statement (from Phase 1)
@@ -398,79 +401,22 @@ If B: skip Phase 3.5 entirely. Remember that the second opinion did NOT run (aff
    - Landscape findings (from Phase 2.75, if search was run)
    - Agreed premises (from Phase 3)
    - Codebase context (project name, languages, recent activity)
+2. Write the prompt to `~/.rstack/tmp/office-hours-second-opinion-prompt.txt`.
+3. If the user chose B, ask them which local command to run. If they chose A, use the current authenticated CLI.
+4. Run only the user-approved local command. Keep it read-only when the CLI supports that mode.
+5. Write stderr to `~/.rstack/tmp/office-hours-second-opinion-stderr.txt`.
+6. Present the full output under `SECOND OPINION (<provider>):`.
+7. On auth failure, timeout, or empty response: note the failure and continue.
 
-2. **Write the assembled prompt to a temp file** (prevents shell injection from user-derived content):
+After presenting the second opinion output, provide 3-5 bullet synthesis:
+  - Where your main recommendation agrees with the second opinion
+  - Where it disagrees and why
+  - Whether the challenged premise changes your recommendation
 
-```bash
-CODEX_PROMPT_FILE=$(mktemp /tmp/rstack-codex-oh-XXXXXXXX.txt)
-```
+If the second opinion challenged an agreed premise, use AskUserQuestion:
 
-Write the full prompt to this file. **Always start with the filesystem boundary:**
-"IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\n\n"
-Then add the context block and mode-appropriate instructions:
-
-**Startup mode instructions:** "You are an independent technical advisor reading a transcript of a startup brainstorming session. [CONTEXT BLOCK HERE]. Your job: 1) What is the STRONGEST version of what this person is trying to build? Steelman it in 2-3 sentences. 2) What is the ONE thing from their answers that reveals the most about what they should actually build? Quote it and explain why. 3) Name ONE agreed premise you think is wrong, and what evidence would prove you right. 4) If you had 48 hours and one engineer to build a prototype, what would you build? Be specific — tech stack, features, what you'd skip. Be direct. Be terse. No preamble."
-
-**Builder mode instructions:** "You are an independent technical advisor reading a transcript of a builder brainstorming session. [CONTEXT BLOCK HERE]. Your job: 1) What is the COOLEST version of this they haven't considered? 2) What's the ONE thing from their answers that reveals what excites them most? Quote it. 3) What existing open source project or tool gets them 50% of the way there — and what's the 50% they'd need to build? 4) If you had a weekend to build this, what would you build first? Be specific. Be direct. No preamble."
-
-3. Run Codex:
-
-```bash
-TMPERR_OH=$(mktemp /tmp/codex-oh-err-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "$(cat "$CODEX_PROMPT_FILE")" -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached 2>"$TMPERR_OH"
-```
-
-Use a 5-minute timeout (`timeout: 300000`). After the command completes, read stderr:
-```bash
-cat "$TMPERR_OH"
-rm -f "$TMPERR_OH" "$CODEX_PROMPT_FILE"
-```
-
-**Error handling:** All errors are non-blocking — second opinion is a quality enhancement, not a prerequisite.
-- **Auth failure:** If stderr contains "auth", "login", "unauthorized", or "API key": "Codex authentication failed. Run \`codex login\` to authenticate." Fall back to Claude subagent.
-- **Timeout:** "Codex timed out after 5 minutes." Fall back to Claude subagent.
-- **Empty response:** "Codex returned no response." Fall back to Claude subagent.
-
-On any Codex error, fall back to the Claude subagent below.
-
-**If CODEX_NOT_AVAILABLE (or Codex errored):**
-
-Dispatch via the Agent tool. The subagent has fresh context — genuine independence.
-
-Subagent prompt: same mode-appropriate prompt as above (Startup or Builder variant).
-
-Present findings under a `SECOND OPINION (Claude subagent):` header.
-
-If the subagent fails or times out: "Second opinion unavailable. Continuing to Phase 4."
-
-4. **Presentation:**
-
-If Codex ran:
-```
-SECOND OPINION (Codex):
-════════════════════════════════════════════════════════════
-<full codex output, verbatim — do not truncate or summarize>
-════════════════════════════════════════════════════════════
-```
-
-If Claude subagent ran:
-```
-SECOND OPINION (Claude subagent):
-════════════════════════════════════════════════════════════
-<full subagent output, verbatim — do not truncate or summarize>
-════════════════════════════════════════════════════════════
-```
-
-5. **Cross-model synthesis:** After presenting the second opinion output, provide 3-5 bullet synthesis:
-   - Where Claude agrees with the second opinion
-   - Where Claude disagrees and why
-   - Whether the challenged premise changes Claude's recommendation
-
-6. **Premise revision check:** If Codex challenged an agreed premise, use AskUserQuestion:
-
-> Codex challenged premise #{N}: "{premise text}". Their argument: "{reasoning}".
-> A) Revise this premise based on Codex's input
+> The second opinion challenged premise #{N}: "{premise text}". Their argument: "{reasoning}".
+> A) Revise this premise based on the outside input
 > B) Keep the original premise — proceed to alternatives
 
 If A: revise the premise and note the revision. If B: proceed (and note that the user defended this premise with reasoning — this is a founder signal if they articulate WHY they disagree, not just dismiss).
@@ -503,7 +449,7 @@ Rules:
 - One must be the **"minimal viable"** (fewest files, smallest diff, ships fastest).
 - One must be the **"ideal architecture"** (best long-term trajectory, most elegant).
 - One can be **creative/lateral** (unexpected approach, different framing of the problem).
-- If the second opinion (Codex or Claude subagent) proposed a prototype in Phase 3.5, consider using it as a starting point for the creative/lateral approach.
+- If the optional second opinion proposed a prototype in Phase 3.5, consider using it as a starting point for the creative/lateral approach.
 
 **RECOMMENDATION:** Choose [X] because [one-line reason].
 
@@ -617,14 +563,15 @@ Generate a single-page HTML file with these constraints:
 
 Write to a temp file:
 ```bash
-SKETCH_FILE="/tmp/rstack-sketch-$(date +%s).html"
+mkdir -p ~/.rstack/tmp
+SKETCH_FILE="$HOME/.rstack/tmp/rstack-sketch-$(date +%s).html"
 ```
 
 **Step 3: Render and capture**
 
 ```bash
 $B goto "file://$SKETCH_FILE"
-$B screenshot /tmp/rstack-sketch.png
+$B screenshot "$HOME/.rstack/tmp/rstack-sketch.png"
 ```
 
 If `$B` is not available (browse binary not set up), skip the render step. Tell the
@@ -640,38 +587,30 @@ If they approve or say "good enough," proceed.
 **Step 5: Include in design doc**
 
 Reference the wireframe screenshot in the design doc's "Recommended Approach" section.
-The screenshot file at `/tmp/rstack-sketch.png` can be referenced by downstream skills
+The screenshot file at `~/.rstack/tmp/rstack-sketch.png` can be referenced by downstream skills
 (`/plan-design-review`, `/design-review`) to see what was originally envisioned.
 
-**Step 6: Outside design voices** (optional)
+**Step 6: Outside design voice** (optional)
 
-After the wireframe is approved, offer outside design perspectives:
+After the wireframe is approved, offer one explicit, local-only outside design
+review.
 
-```bash
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-```
-
-If Codex is available, use AskUserQuestion:
-> "Want outside design perspectives on the chosen approach? Codex proposes a visual thesis, content plan, and interaction ideas. A Claude subagent proposes an alternative aesthetic direction."
+Use AskUserQuestion:
+> "Want an outside design perspective on the chosen approach?"
 >
-> A) Yes — get outside design voices
-> B) No — proceed without
+> A) Use the current CLI
+> B) Use another installed local reviewer CLI
+> C) No — proceed without
 
-If user chooses A, launch both voices simultaneously:
-
-1. **Codex** (via Bash, `model_reasoning_effort="medium"`):
-```bash
-TMPERR_SKETCH=$(mktemp /tmp/codex-sketch-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "For this product approach, provide: a visual thesis (one sentence — mood, material, energy), a content plan (hero → support → detail → CTA), and 2 interaction ideas that change page feel. Apply beautiful defaults: composition-first, brand-first, cardless, poster not document. Be opinionated." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="medium"' --enable web_search_cached 2>"$TMPERR_SKETCH"
-```
-Use a 5-minute timeout (`timeout: 300000`). After completion: `cat "$TMPERR_SKETCH" && rm -f "$TMPERR_SKETCH"`
-
-2. **Claude subagent** (via Agent tool):
-"For this product approach, what design direction would you recommend? What aesthetic, typography, and interaction patterns fit? What would make this approach feel inevitable to the user? Be specific — font names, hex colors, spacing values."
-
-Present Codex output under `CODEX SAYS (design sketch):` and subagent output under `CLAUDE SUBAGENT (design direction):`.
-Error handling: all non-blocking. On failure, skip and continue.
+If the user chooses A or B:
+1. Write a prompt to `~/.rstack/tmp/office-hours-design-voice-prompt.txt` asking for:
+   - a visual thesis
+   - a content plan
+   - two interaction ideas that change page feel
+2. Run only the user-approved local CLI.
+3. Write stderr to `~/.rstack/tmp/office-hours-design-voice-stderr.txt`.
+4. Present the full output under `OUTSIDE DESIGN VOICE (<provider>):`.
+5. On failure, skip and continue. Never auto-fallback to another provider or dispatch another agent.
 
 ---
 
@@ -687,7 +626,7 @@ Track which of these signals appeared during the session:
 - Has **domain expertise** — knows this space from the inside
 - Showed **taste** — cared about getting the details right
 - Showed **agency** — actually building, not just planning
-- **Defended premise with reasoning** against cross-model challenge (kept original premise when Codex disagreed AND articulated specific reasoning for why — dismissal without reasoning does not count)
+- **Defended premise with reasoning** against outside challenge (kept the original premise and articulated specific reasoning for why — dismissal without reasoning does not count)
 
 Count the signals. You'll use this count in Phase 6 to determine which tier of closing message to use.
 
@@ -770,7 +709,7 @@ Supersedes: {prior filename — omit this line if first design on this branch}
 {from Phase 3}
 
 ## Cross-Model Perspective
-{If second opinion ran in Phase 3.5 (Codex or Claude subagent): independent cold read — steelman, key insight, challenged premise, prototype suggestion. Verbatim or close paraphrase. If second opinion did NOT run (skipped or unavailable): omit this section entirely — do not include it.}
+{If the optional second opinion ran in Phase 3.5: independent cold read — steelman, key insight, challenged premise, prototype suggestion. Verbatim or close paraphrase. If it did NOT run (skipped or unavailable): omit this section entirely — do not include it.}
 
 ## Approaches Considered
 ### Approach A: {name}
@@ -827,7 +766,7 @@ Supersedes: {prior filename — omit this line if first design on this branch}
 {from Phase 3}
 
 ## Cross-Model Perspective
-{If second opinion ran in Phase 3.5 (Codex or Claude subagent): independent cold read — coolest version, key insight, existing tools, prototype suggestion. Verbatim or close paraphrase. If second opinion did NOT run (skipped or unavailable): omit this section entirely — do not include it.}
+{If the optional second opinion ran in Phase 3.5: independent cold read — coolest version, key insight, existing tools, prototype suggestion. Verbatim or close paraphrase. If it did NOT run (skipped or unavailable): omit this section entirely — do not include it.}
 
 ## Approaches Considered
 ### Approach A: {name}
@@ -859,44 +798,21 @@ Supersedes: {prior filename — omit this line if first design on this branch}
 
 ## Spec Review Loop
 
-Before presenting the document to the user for approval, run an adversarial review.
+Before presenting the document to the user for approval, run one adversarial
+review pass yourself. If the user explicitly asks for a second reviewer, you may
+use a user-approved local reviewer CLI, but never auto-dispatch another agent.
 
-**Step 1: Dispatch reviewer subagent**
-
-Use the Agent tool to dispatch an independent reviewer. The reviewer has fresh context
-and cannot see the brainstorming conversation — only the document. This ensures genuine
-adversarial independence.
-
-Prompt the subagent with:
-- The file path of the document just written
-- "Read this document and review it on 5 dimensions. For each dimension, note PASS or
-  list specific issues with suggested fixes. At the end, output a quality score (1-10)
-  across all dimensions."
-
-**Dimensions:**
+Review the document on these 5 dimensions:
 1. **Completeness** — Are all requirements addressed? Missing edge cases?
 2. **Consistency** — Do parts of the document agree with each other? Contradictions?
 3. **Clarity** — Could an engineer implement this without asking questions? Ambiguous language?
 4. **Scope** — Does the document creep beyond the original problem? YAGNI violations?
 5. **Feasibility** — Can this actually be built with the stated approach? Hidden complexity?
 
-The subagent should return:
-- A quality score (1-10)
-- PASS if no issues, or a numbered list of issues with dimension, description, and fix
-
-**Step 2: Fix and re-dispatch**
-
-If the reviewer returns issues:
-1. Fix each issue in the document on disk (use Edit tool)
-2. Re-dispatch the reviewer subagent with the updated document
-3. Maximum 3 iterations total
-
-**Convergence guard:** If the reviewer returns the same issues on consecutive iterations
-(the fix didn't resolve them or the reviewer disagrees with the fix), stop the loop
-and persist those issues as "Reviewer Concerns" in the document rather than looping
-further.
-
-If the subagent fails, times out, or is unavailable — skip the review loop entirely.
+If issues are found:
+1. Fix them in the document on disk.
+2. Re-review once.
+3. If the same issue remains after the second pass, persist it as `Reviewer Concerns` instead of looping.
 Tell the user: "Spec review unavailable — presenting unreviewed doc." The document is
 already written to disk; the review is a quality bonus, not a gate.
 
@@ -914,8 +830,8 @@ After the loop completes (PASS, max iterations, or convergence guard):
 
 3. Append metrics:
 ```bash
-mkdir -p ~/.rstack/analytics
-echo '{"skill":"office-hours","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","iterations":ITERATIONS,"issues_found":FOUND,"issues_fixed":FIXED,"remaining":REMAINING,"quality_score":SCORE}' >> ~/.rstack/analytics/spec-review.jsonl 2>/dev/null || true
+mkdir -p ~/.rstack
+echo '{"skill":"office-hours","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","iterations":ITERATIONS,"issues_found":FOUND,"issues_fixed":FIXED,"remaining":REMAINING,"quality_score":SCORE}' >> ~/.rstack/review-log.jsonl 2>/dev/null || true
 ```
 Replace ITERATIONS, FOUND, FIXED, REMAINING, SCORE with actual values from the review.
 

@@ -13,9 +13,14 @@ RStack is a markdown-first skill pack. Each skill lives in `skills/<name>/SKILL.
 
 ## Local State
 
-- Use `.rstack/` for local artifacts that should persist across sessions.
-- Use `.context/` for scratch notes shared across agents in this workspace.
-- Do not write hidden data outside those locations unless the user explicitly asks.
+- Use `~/.rstack/` for all persisted local artifacts, scratch files, logs, and temporary outputs.
+- Do not write hidden state to `.rstack/`, `.context/`, `/tmp`, or any other project-local directory unless the user explicitly asks.
+
+## External Review And Browser Control
+
+- Never invoke external review/model CLIs, subagents, or remote helpers automatically.
+- If a workflow offers an outside review, ask the user which local provider to use and default to the current CLI only after the user opts in.
+- Never let another agent or remote service control the browser unless the user explicitly invokes that workflow.
 
 ## Supported Skills
 

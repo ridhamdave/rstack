@@ -32,6 +32,8 @@ Name files, commands, and risks. Avoid hype, filler, and hidden assumptions.
 RStack is markdown-first. No telemetry, no analytics, no remote sync, no hidden upgrade flow.
 Use repo-local context first. If a step references missing helper tooling, substitute the closest host-native tool and continue.
 Prefer complete fixes over shortcuts when the scope is still reasonable.
+Persist all workflow state under `~/.rstack/` only. Do not write scratch or state files to `.rstack/`, `.context/`, or `/tmp/`.
+Never invoke external reviewer CLIs, subagents, or browser-control helpers automatically. Offer them explicitly, let the user choose the provider, and default to the current host CLI only if the user approves.
 End every workflow with one of: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
 
 ## Phase 0: Pre-checks
@@ -59,7 +61,7 @@ Look for office-hours output:
 setopt +o nomatch 2>/dev/null || true  # zsh compat
 eval "$(~/.claude/skills/rstack/bin/rstack-slug 2>/dev/null)"
 ls ~/.rstack/projects/$SLUG/*office-hours* 2>/dev/null | head -5
-ls .context/*office-hours* .context/attachments/*office-hours* 2>/dev/null | head -5
+ls ~/.rstack/projects/$SLUG/*office-hours* 2>/dev/null | head -5
 ```
 
 If office-hours output exists, read it — the product context is pre-filled.
@@ -188,7 +190,7 @@ If the browse binary is available (`$B` is set), visit the top 3-5 sites in the 
 
 ```bash
 $B goto "https://example-site.com"
-$B screenshot "/tmp/design-research-site-name.png"
+$B screenshot "$HOME/.rstack/tmp/design-research-site-name.png"
 $B snapshot
 ```
 
@@ -222,68 +224,38 @@ If the user said no research, skip entirely and proceed to Phase 3 using your bu
 ## Design Outside Voices (parallel)
 
 Use AskUserQuestion:
-> "Want outside design voices? Codex evaluates against OpenAI's design hard rules + litmus checks; Claude subagent does an independent design direction proposal."
+> "Want an outside design voice? It should come from a local reviewer CLI you choose."
 >
-> A) Yes — run outside design voices
-> B) No — proceed without
+> A) Use the current CLI
+> B) Use another installed local reviewer CLI
+> C) No — proceed without
 
-If user chooses B, skip this step and continue.
+If user chooses C, skip this step and continue.
 
-**Check Codex availability:**
-```bash
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-```
+If user chooses A or B:
+1. Write a prompt to `~/.rstack/tmp/design-consultation-outside-voice-prompt.txt` asking for:
+   - a visual thesis
+   - a typography stack
+   - a color system
+   - a layout direction
+   - deliberate departures from category norms
+2. If the user chose B, ask them which local command to run. If they chose A, use the current authenticated CLI.
+3. Run only the user-approved local command.
+4. Write stderr to `~/.rstack/tmp/design-consultation-outside-voice-stderr.txt`.
+5. Present the full output under `OUTSIDE DESIGN VOICE (<provider>):`.
+6. On auth failure, timeout, or empty response: note the failure and continue. Never auto-fallback to another provider. Never dispatch another agent.
 
-**If Codex is available**, launch both voices simultaneously:
-
-1. **Codex design voice** (via Bash):
-```bash
-TMPERR_DESIGN=$(mktemp /tmp/codex-design-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "Given this product context, propose a complete design direction:
-- Visual thesis: one sentence describing mood, material, and energy
-- Typography: specific font names (not defaults — no Inter/Roboto/Arial/system) + hex colors
-- Color system: CSS variables for background, surface, primary text, muted text, accent
-- Layout: composition-first, not component-first. First viewport as poster, not document
-- Differentiation: 2 deliberate departures from category norms
-- Anti-slop: no purple gradients, no 3-column icon grids, no centered everything, no decorative blobs
-
-Be opinionated. Be specific. Do not hedge. This is YOUR design direction — own it." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="medium"' --enable web_search_cached 2>"$TMPERR_DESIGN"
-```
-Use a 5-minute timeout (`timeout: 300000`). After the command completes, read stderr:
-```bash
-cat "$TMPERR_DESIGN" && rm -f "$TMPERR_DESIGN"
-```
-
-2. **Claude design subagent** (via Agent tool):
-Dispatch a subagent with this prompt:
-"Given this product context, propose a design direction that would SURPRISE. What would the cool indie studio do that the enterprise UI team wouldn't?
-- Propose an aesthetic direction, typography stack (specific font names), color palette (hex values)
-- 2 deliberate departures from category norms
-- What emotional reaction should the user have in the first 3 seconds?
-
-Be bold. Be specific. No hedging."
-
-**Error handling (all non-blocking):**
-- **Auth failure:** If stderr contains "auth", "login", "unauthorized", or "API key": "Codex authentication failed. Run `codex login` to authenticate."
-- **Timeout:** "Codex timed out after 5 minutes."
-- **Empty response:** "Codex returned no response."
-- On any Codex error: proceed with Claude subagent output only, tagged `[single-model]`.
-- If Claude subagent also fails: "Outside voices unavailable — continuing with primary review."
-
-Present Codex output under a `CODEX SAYS (design direction):` header.
-Present subagent output under a `CLAUDE SUBAGENT (design direction):` header.
-
-**Synthesis:** Claude main references both Codex and subagent proposals in the Phase 3 proposal. Present:
-- Areas of agreement between all three voices (Claude main + Codex + subagent)
+**Synthesis:** Reference both your proposal and the outside voice in Phase 3:
+- Areas of agreement
 - Genuine divergences as creative alternatives for the user to choose from
-- "Codex and I agree on X. Codex suggested Y where I'm proposing Z — here's why..."
+- Why you prefer your recommendation when the views differ
 
 **Log the result:**
 ```bash
-~/.claude/skills/rstack/bin/rstack-review-log '{"skill":"design-outside-voices","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}'
+mkdir -p ~/.rstack
+echo '{"skill":"design-outside-voices","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}' >> ~/.rstack/review-log.jsonl
 ```
-Replace STATUS with "clean" or "issues_found", SOURCE with "codex+subagent", "codex-only", "subagent-only", or "unavailable".
+Replace STATUS with "clean" or "issues_found", SOURCE with the provider label the user chose or "unavailable".
 
 ## Phase 3: The Complete Proposal
 
@@ -534,7 +506,7 @@ After the user picks a direction:
 Generate a polished HTML preview page and open it in the user's browser. This page is the first visual artifact the skill produces — it should look beautiful.
 
 ```bash
-PREVIEW_FILE="/tmp/design-consultation-preview-$(date +%s).html"
+PREVIEW_FILE="$HOME/.rstack/tmp/design-consultation-preview-$(date +%s).html"
 ```
 
 Write the preview HTML to `$PREVIEW_FILE`, then open it:

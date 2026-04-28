@@ -9,6 +9,7 @@ This repo keeps the specialist workflow and skill structure while stripping out 
 - No YC or Garry Tan branding
 - No generated-skill pipeline
 - No install/update machinery in the repo itself
+- No automatic vendor-specific review dispatch
 
 ## What Is Here
 
@@ -19,6 +20,7 @@ The imported skills were sanitized for RStack:
 - shared telemetry and upgrade wrappers removed
 - common runtime replaced with a small RStack runtime block
 - `office-hours` stripped of YC application and founder-marketing sections
+- external review flows rewritten to be local-only and user-approved
 
 ## Install
 
@@ -28,7 +30,7 @@ Once this repo is public on GitHub, people can install directly without cloning:
 
 ```bash
 npx skills add ridhamdave/rstack --list
-npx skills add ridhamdave/rstack --skill qa --agent codex
+npx skills add ridhamdave/rstack --skill qa --agent claude-code
 npx skills add ridhamdave/rstack --skill office-hours -g --agent claude-code
 ```
 
@@ -78,16 +80,16 @@ Lean supported set:
 Examples:
 
 ```bash
-./setup --host codex
 ./setup --host claude
 ./setup --host all
-./setup --host codex --no-prefix
+./setup --host codex
+./setup --host claude --no-prefix
 ```
 
 Targets:
 
-- Codex: `~/.codex/skills/`
 - Claude: `~/.claude/skills/`
+- Codex: `~/.codex/skills/`
 
 If you use `--no-prefix`, skills install as plain names like `qa` and `ship`.
 Otherwise they install as `rstack-qa`, `rstack-ship`, and so on.
@@ -136,9 +138,9 @@ For `skills.sh`, the important parts are:
 - skills live in a standard discovery path, now `skills/`
 - people install the repo through `npx skills add ...`
 
-`skills.sh` says the leaderboard is powered by anonymous telemetry from the
-`skills` CLI, so installs through `npx skills` are what help a public repo show
-up and rank there.
+RStack itself does not send review prompts, analytics, or state outside your
+machine. If your host CLI has its own telemetry behavior, that is controlled by
+that host, not by this repo.
 
 ## Current Shape
 
@@ -153,8 +155,8 @@ as playbooks:
 ## Repo Conventions
 
 - skill source of truth lives in `skills/<name>/SKILL.md`
-- local artifacts should go under `.rstack/`
-- collaboration scratch files can go under `.context/`
+- local artifacts should go under `~/.rstack/`
+- review prompts, screenshots, and temp files should stay under `~/.rstack/`
 - this repo is the fork source, not a generated output
 
 ## Skill Set

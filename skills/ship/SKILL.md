@@ -15,7 +15,6 @@ allowed-tools:
   - Edit
   - Grep
   - Glob
-  - Agent
   - AskUserQuestion
   - WebSearch
 ---
@@ -31,6 +30,8 @@ Name files, commands, and risks. Avoid hype, filler, and hidden assumptions.
 RStack is markdown-first. No telemetry, no analytics, no remote sync, no hidden upgrade flow.
 Use repo-local context first. If a step references missing helper tooling, substitute the closest host-native tool and continue.
 Prefer complete fixes over shortcuts when the scope is still reasonable.
+Persist all workflow state under `~/.rstack/` only. Do not write scratch or state files to `.rstack/`, `.context/`, or `/tmp/`.
+Never invoke external reviewer CLIs, subagents, or browser-control helpers automatically. Offer them explicitly, let the user choose the provider, and default to the current host CLI only if the user approves.
 End every workflow with one of: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
 
 ## Step 0: Detect platform and base branch
@@ -126,10 +127,10 @@ Never skip a verification step because a prior `/ship` run already performed it.
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-~/.claude/skills/rstack/bin/rstack-review-read
+cat ~/.rstack/review-log.jsonl 2>/dev/null || true
 ```
 
-Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, codex-review, codex-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between `review` (diff-scoped pre-landing review) and `plan-eng-review` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show whichever is more recent between `adversarial-review` (new auto-scaled) and `codex-review` (legacy). For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent `codex-plan-review` entry — this captures outside voices from both /plan-ceo-review and /plan-eng-review.
+Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, external-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between `review` (diff-scoped pre-landing review) and `plan-eng-review` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show the most recent `adversarial-review`. For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent `external-plan-review`.
 
 **Source attribution:** If the most recent entry for a skill has a \`"via"\` field, append it to the status label in parentheses. Examples: `plan-eng-review` with `via:"autoplan"` shows as "CLEAR (PLAN via /autoplan)". `review` with `via:"ship"` shows as "CLEAR (DIFF via /ship)". Entries without a `via` field show as "CLEAR (PLAN)" or "CLEAR (DIFF)" as before.
 
@@ -157,13 +158,13 @@ Display:
 - **Eng Review (required by default):** The only review that gates shipping. Covers architecture, code quality, tests, performance. Can be disabled globally with \`rstack-config set skip_eng_review true\` (the "don't bother me" setting).
 - **CEO Review (optional):** Use your judgment. Recommend it for big product/business changes, new user-facing features, or scope decisions. Skip for bug fixes, refactors, infra, and cleanup.
 - **Design Review (optional):** Use your judgment. Recommend it for UI/UX changes. Skip for backend-only, infra, or prompt-only changes.
-- **Adversarial Review (automatic):** Always-on for every review. Every diff gets both Claude adversarial subagent and Codex adversarial challenge. Large diffs (200+ lines) additionally get Codex structured review with P1 gate. No configuration needed.
-- **Outside Voice (optional):** Independent plan review from a different AI model. Offered after all review sections complete in /plan-ceo-review and /plan-eng-review. Falls back to Claude subagent if Codex is unavailable. Never gates shipping.
+- **Adversarial Review (optional):** Local-only and user-approved. Use it when the user explicitly wants an extra failure-mode pass.
+- **Outside Voice (optional):** Independent plan review from a user-approved local reviewer CLI. Never gates shipping.
 
 **Verdict logic:**
 - **CLEARED**: Eng Review has >= 1 entry within 7 days from either \`review\` or \`plan-eng-review\` with status "clean" (or \`skip_eng_review\` is \`true\`)
 - **NOT CLEARED**: Eng Review missing, stale (>7 days), or has open issues
-- CEO, Design, and Codex reviews are shown for context but never block shipping
+- CEO, Design, and outside reviews are shown for context but never block shipping
 - If \`skip_eng_review\` config is \`true\`, Eng Review shows "SKIPPED (global)" and verdict is CLEARED
 
 **Staleness detection:** After displaying the dashboard, check if any existing reviews may be stale:
@@ -251,7 +252,7 @@ setopt +o nomatch 2>/dev/null || true  # zsh compat
 ls jest.config.* vitest.config.* playwright.config.* .rspec pytest.ini pyproject.toml phpunit.xml 2>/dev/null
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 # Check opt-out marker
-[ -f .rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
+[ -f ~/.rstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
 ```
 
 **If test framework detected** (config files or test directories found):
@@ -264,7 +265,7 @@ Store conventions as prose context for use in Phase 8e.5 or Step 3.4. **Skip the
 **If NO runtime detected** (no config files found): Use AskUserQuestion:
 "I couldn't detect your project's language. What runtime are you using?"
 Options: A) Node.js/TypeScript B) Ruby/Rails C) Python D) Go E) Rust F) PHP G) Elixir H) This project doesn't need tests.
-If user picks H → write `.rstack/no-test-bootstrap` and continue without tests.
+If user picks H → write `~/.rstack/no-test-bootstrap` and continue without tests.
 
 **If runtime detected but no test framework — bootstrap:**
 
@@ -296,7 +297,7 @@ B) [Alternative] — [rationale]. Includes: [packages]
 C) Skip — don't set up testing right now
 RECOMMENDATION: Choose A because [reason based on project context]"
 
-If user picks C → write `.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `.rstack/no-test-bootstrap` and re-run." Continue without tests.
+If user picks C → write `~/.rstack/no-test-bootstrap`. Tell user: "If you change your mind later, delete `~/.rstack/no-test-bootstrap` and re-run." Continue without tests.
 
 If multiple runtimes detected (monorepo) → ask which runtime to set up first, with option to do both sequentially.
 
@@ -395,8 +396,9 @@ Running bare test migrations without INSTANCE hits an orphan DB and corrupts str
 Run both test suites in parallel:
 
 ```bash
-bin/test-lane 2>&1 | tee /tmp/ship_tests.txt &
-npm run test 2>&1 | tee /tmp/ship_vitest.txt &
+mkdir -p ~/.rstack/tmp
+bin/test-lane 2>&1 | tee ~/.rstack/tmp/ship_tests.txt &
+npm run test 2>&1 | tee ~/.rstack/tmp/ship_vitest.txt &
 wait
 ```
 
@@ -555,7 +557,8 @@ Map runner → test file: `post_generation_eval_runner.rb` → `post_generation_
 `/ship` is a pre-merge gate, so always use full tier (Sonnet structural + Opus persona judges).
 
 ```bash
-EVAL_JUDGE_TIER=full EVAL_VERBOSE=1 bin/test-lane --eval test/evals/<suite>_eval_test.rb 2>&1 | tee /tmp/ship_evals.txt
+mkdir -p ~/.rstack/tmp
+EVAL_JUDGE_TIER=full EVAL_VERBOSE=1 bin/test-lane --eval test/evals/<suite>_eval_test.rb 2>&1 | tee ~/.rstack/tmp/ship_evals.txt
 ```
 
 If multiple suites need to run, run them sequentially (each needs a test lane). If the first suite fails, stop immediately — don't burn API cost on remaining suites.
@@ -854,7 +857,7 @@ REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
 _PLAN_SLUG=$(git remote get-url origin 2>/dev/null | sed 's|.*[:/]\([^/]*/[^/]*\)\.git$|\1|;s|.*[:/]\([^/]*/[^/]*\)$|\1|' | tr '/' '-' | tr -cd 'a-zA-Z0-9._-') || true
 _PLAN_SLUG="${_PLAN_SLUG:-$(basename "$PWD" | tr -cd 'a-zA-Z0-9._-')}"
 # Search common plan file locations (project designs first, then personal/local)
-for PLAN_DIR in "$HOME/.rstack/projects/$_PLAN_SLUG" "$HOME/.claude/plans" "$HOME/.codex/plans" ".rstack/plans"; do
+for PLAN_DIR in "$HOME/.rstack/projects/$_PLAN_SLUG" "$HOME/.rstack/plans"; do
   [ -d "$PLAN_DIR" ] || continue
   PLAN=$(ls -t "$PLAN_DIR"/*.md 2>/dev/null | xargs grep -l "$BRANCH" 2>/dev/null | head -1)
   [ -z "$PLAN" ] && PLAN=$(ls -t "$PLAN_DIR"/*.md 2>/dev/null | xargs grep -l "$REPO" 2>/dev/null | head -1)
@@ -1119,302 +1122,49 @@ source <(~/.claude/skills/rstack/bin/rstack-diff-scope <base> 2>/dev/null)
 6. **Log the result** for the Review Readiness Dashboard:
 
 ```bash
-~/.claude/skills/rstack/bin/rstack-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":M,"commit":"COMMIT"}'
+mkdir -p ~/.rstack
+echo '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":M,"commit":"COMMIT"}' >> ~/.rstack/review-log.jsonl
 ```
 
 Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, M = auto-fixed count, COMMIT = output of `git rev-parse --short HEAD`.
 
-7. **Codex design voice** (optional, automatic if available):
+7. **Optional outside design voice** (never automatic):
+
+Use AskUserQuestion:
+- A) Use the current CLI for a local design pass
+- B) Use another installed local reviewer CLI
+- C) Skip
+
+If the user chooses A or B:
+1. Write a prompt to `~/.rstack/tmp/ship-design-review-prompt.txt` asking for a lightweight diff-based design check.
+2. Run only the user-approved local command.
+3. Write stderr to `~/.rstack/tmp/ship-design-review-stderr.txt`.
+4. Present the full output under `OUTSIDE DESIGN VOICE (<provider>):`.
+5. Treat findings the same way as the checklist findings below.
+
+## Step 3.55: Local Pre-Landing Review
+
+Keep this review local and single-agent by default. Do not dispatch specialists,
+subagents, red-team agents, or remote helpers automatically.
+
+1. Review the diff yourself for testing, maintainability, security, performance,
+   API contract, migrations, and design risks.
+2. If the user explicitly asks for an outside review, let them choose a local
+   reviewer CLI and run only that approved command.
+3. If `~/.rstack/review-log.jsonl` exists, use it as the prior-review history for
+   deduping intentionally skipped findings on unchanged files.
+4. Output a summary header: `Pre-Landing Review: N issues (X critical, Y informational)`.
+5. Classify each finding as AUTO-FIX or ASK per the Fix-First Heuristic in `checklist.md`.
+6. Auto-fix all AUTO-FIX items. Output one line per fix:
+   `[AUTO-FIXED] [file:line] Problem -> what you did`
+7. If ASK items remain, present them in one AskUserQuestion unless there are 3 or fewer.
+8. If any fixes were applied, commit the fixed files, stop, and tell the user to run `/ship` again to re-test.
+9. Persist the review result locally:
 
 ```bash
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
+mkdir -p ~/.rstack
+echo '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"commit":"'"$(git rev-parse --short HEAD)"'","via":"ship"}' >> ~/.rstack/review-log.jsonl
 ```
-
-If Codex is available, run a lightweight design check on the diff:
-
-```bash
-TMPERR_DRL=$(mktemp /tmp/codex-drl-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "Review the git diff on this branch. Run 7 litmus checks (YES/NO each): 1. Brand/product unmistakable in first screen? 2. One strong visual anchor present? 3. Page understandable by scanning headlines only? 4. Each section has one job? 5. Are cards actually necessary? 6. Does motion improve hierarchy or atmosphere? 7. Would design feel premium with all decorative shadows removed? Flag any hard rejections: 1. Generic SaaS card grid as first impression 2. Beautiful image with weak brand 3. Strong headline with no clear action 4. Busy imagery behind text 5. Sections repeating same mood statement 6. Carousel with no narrative purpose 7. App UI made of stacked cards instead of layout 5 most important design findings only. Reference file:line." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached 2>"$TMPERR_DRL"
-```
-
-Use a 5-minute timeout (`timeout: 300000`). After the command completes, read stderr:
-```bash
-cat "$TMPERR_DRL" && rm -f "$TMPERR_DRL"
-```
-
-**Error handling:** All errors are non-blocking. On auth failure, timeout, or empty response — skip with a brief note and continue.
-
-Present Codex output under a `CODEX (design):` header, merged with the checklist findings above.
-
-   Include any design findings alongside the code review findings. They follow the same Fix-First flow below.
-
-## Step 3.55: Review Army — Specialist Dispatch
-
-### Detect stack and scope
-
-```bash
-source <(~/.claude/skills/rstack/bin/rstack-diff-scope <base> 2>/dev/null) || true
-# Detect stack for specialist context
-STACK=""
-[ -f Gemfile ] && STACK="${STACK}ruby "
-[ -f package.json ] && STACK="${STACK}node "
-[ -f requirements.txt ] || [ -f pyproject.toml ] && STACK="${STACK}python "
-[ -f go.mod ] && STACK="${STACK}go "
-[ -f Cargo.toml ] && STACK="${STACK}rust "
-echo "STACK: ${STACK:-unknown}"
-DIFF_INS=$(git diff origin/<base> --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
-DIFF_DEL=$(git diff origin/<base> --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
-DIFF_LINES=$((DIFF_INS + DIFF_DEL))
-echo "DIFF_LINES: $DIFF_LINES"
-# Detect test framework for specialist test stub generation
-TEST_FW=""
-{ [ -f jest.config.ts ] || [ -f jest.config.js ]; } && TEST_FW="jest"
-[ -f vitest.config.ts ] && TEST_FW="vitest"
-{ [ -f spec/spec_helper.rb ] || [ -f .rspec ]; } && TEST_FW="rspec"
-{ [ -f pytest.ini ] || [ -f conftest.py ]; } && TEST_FW="pytest"
-[ -f go.mod ] && TEST_FW="go-test"
-echo "TEST_FW: ${TEST_FW:-unknown}"
-```
-
-### Read specialist hit rates (adaptive gating)
-
-```bash
-~/.claude/skills/rstack/bin/rstack-specialist-stats 2>/dev/null || true
-```
-
-### Select specialists
-
-Based on the scope signals above, select which specialists to dispatch.
-
-**Always-on (dispatch on every review with 50+ changed lines):**
-1. **Testing** — read `~/.claude/skills/rstack/review/specialists/testing.md`
-2. **Maintainability** — read `~/.claude/skills/rstack/review/specialists/maintainability.md`
-
-**If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to the Fix-First flow (item 4).
-
-**Conditional (dispatch if the matching scope signal is true):**
-3. **Security** — if SCOPE_AUTH=true, OR if SCOPE_BACKEND=true AND DIFF_LINES > 100. Read `~/.claude/skills/rstack/review/specialists/security.md`
-4. **Performance** — if SCOPE_BACKEND=true OR SCOPE_FRONTEND=true. Read `~/.claude/skills/rstack/review/specialists/performance.md`
-5. **Data Migration** — if SCOPE_MIGRATIONS=true. Read `~/.claude/skills/rstack/review/specialists/data-migration.md`
-6. **API Contract** — if SCOPE_API=true. Read `~/.claude/skills/rstack/review/specialists/api-contract.md`
-7. **Design** — if SCOPE_FRONTEND=true. Use the existing design review checklist at `~/.claude/skills/rstack/review/design-checklist.md`
-
-### Adaptive gating
-
-After scope-based selection, apply adaptive gating based on specialist hit rates:
-
-For each conditional specialist that passed scope gating, check the `rstack-specialist-stats` output above:
-- If tagged `[GATE_CANDIDATE]` (0 findings in 10+ dispatches): skip it. Print: "[specialist] auto-gated (0 findings in N reviews)."
-- If tagged `[NEVER_GATE]`: always dispatch regardless of hit rate. Security and data-migration are insurance policy specialists — they should run even when silent.
-
-**Force flags:** If the user's prompt includes `--security`, `--performance`, `--testing`, `--maintainability`, `--data-migration`, `--api-contract`, `--design`, or `--all-specialists`, force-include that specialist regardless of gating.
-
-Note which specialists were selected, gated, and skipped. Print the selection:
-"Dispatching N specialists: [names]. Skipped: [names] (scope not detected). Gated: [names] (0 findings in N+ reviews)."
-
----
-
-### Dispatch specialists in parallel
-
-For each selected specialist, launch an independent subagent via the Agent tool.
-**Launch ALL selected specialists in a single message** (multiple Agent tool calls)
-so they run in parallel. Each subagent has fresh context — no prior review bias.
-
-**Each specialist subagent prompt:**
-
-Construct the prompt for each specialist. The prompt includes:
-
-1. The specialist's checklist content (you already read the file above)
-2. Stack context: "This is a {STACK} project."
-3. Past learnings for this domain (if any exist):
-
-```bash
-~/.claude/skills/rstack/bin/rstack-learnings-search --type pitfall --query "{specialist domain}" --limit 5 2>/dev/null || true
-```
-
-If learnings are found, include them: "Past learnings for this domain: {learnings}"
-
-4. Instructions:
-
-"You are a specialist code reviewer. Read the checklist below, then run
-`git diff origin/<base>` to get the full diff. Apply the checklist against the diff.
-
-For each finding, output a JSON object on its own line:
-{\"severity\":\"CRITICAL|INFORMATIONAL\",\"confidence\":N,\"path\":\"file\",\"line\":N,\"category\":\"category\",\"summary\":\"description\",\"fix\":\"recommended fix\",\"fingerprint\":\"path:line:category\",\"specialist\":\"name\"}
-
-Required fields: severity, confidence, path, category, summary, specialist.
-Optional: line, fix, fingerprint, evidence, test_stub.
-
-If you can write a test that would catch this issue, include it in the `test_stub` field.
-Use the detected test framework ({TEST_FW}). Write a minimal skeleton — describe/it/test
-blocks with clear intent. Skip test_stub for architectural or design-only findings.
-
-If no findings: output `NO FINDINGS` and nothing else.
-Do not output anything else — no preamble, no summary, no commentary.
-
-Stack context: {STACK}
-Past learnings: {learnings or 'none'}
-
-CHECKLIST:
-{checklist content}"
-
-**Subagent configuration:**
-- Use `subagent_type: "general-purpose"`
-- Do NOT use `run_in_background` — all specialists must complete before merge
-- If any specialist subagent fails or times out, log the failure and continue with results from successful specialists. Specialists are additive — partial results are better than no results.
-
----
-
-### Step 3.56: Collect and merge findings
-
-After all specialist subagents complete, collect their outputs.
-
-**Parse findings:**
-For each specialist's output:
-1. If output is "NO FINDINGS" — skip, this specialist found nothing
-2. Otherwise, parse each line as a JSON object. Skip lines that are not valid JSON.
-3. Collect all parsed findings into a single list, tagged with their specialist name.
-
-**Fingerprint and deduplicate:**
-For each finding, compute its fingerprint:
-- If `fingerprint` field is present, use it
-- Otherwise: `{path}:{line}:{category}` (if line is present) or `{path}:{category}`
-
-Group findings by fingerprint. For findings sharing the same fingerprint:
-- Keep the finding with the highest confidence score
-- Tag it: "MULTI-SPECIALIST CONFIRMED ({specialist1} + {specialist2})"
-- Boost confidence by +1 (cap at 10)
-- Note the confirming specialists in the output
-
-**Apply confidence gates:**
-- Confidence 7+: show normally in the findings output
-- Confidence 5-6: show with caveat "Medium confidence — verify this is actually an issue"
-- Confidence 3-4: move to appendix (suppress from main findings)
-- Confidence 1-2: suppress entirely
-
-**Compute PR Quality Score:**
-After merging, compute the quality score:
-`quality_score = max(0, 10 - (critical_count * 2 + informational_count * 0.5))`
-Cap at 10. Log this in the review result at the end.
-
-**Output merged findings:**
-Present the merged findings in the same format as the current review:
-
-```
-SPECIALIST REVIEW: N findings (X critical, Y informational) from Z specialists
-
-[For each finding, in order: CRITICAL first, then INFORMATIONAL, sorted by confidence descending]
-[SEVERITY] (confidence: N/10, specialist: name) path:line — summary
-  Fix: recommended fix
-  [If MULTI-SPECIALIST CONFIRMED: show confirmation note]
-
-PR Quality Score: X/10
-```
-
-These findings flow into the Fix-First flow (item 4) alongside the checklist pass (Step 3.5).
-The Fix-First heuristic applies identically — specialist findings follow the same AUTO-FIX vs ASK classification.
-
-**Compile per-specialist stats:**
-After merging findings, compile a `specialists` object for the review-log persist.
-For each specialist (testing, maintainability, security, performance, data-migration, api-contract, design, red-team):
-- If dispatched: `{"dispatched": true, "findings": N, "critical": N, "informational": N}`
-- If skipped by scope: `{"dispatched": false, "reason": "scope"}`
-- If skipped by gating: `{"dispatched": false, "reason": "gated"}`
-- If not applicable (e.g., red-team not activated): omit from the object
-
-Include the Design specialist even though it uses `design-checklist.md` instead of the specialist schema files.
-Remember these stats — you will need them for the review-log entry in Step 5.8.
-
----
-
-### Red Team dispatch (conditional)
-
-**Activation:** Only if DIFF_LINES > 200 OR any specialist produced a CRITICAL finding.
-
-If activated, dispatch one more subagent via the Agent tool (foreground, not background).
-
-The Red Team subagent receives:
-1. The red-team checklist from `~/.claude/skills/rstack/review/specialists/red-team.md`
-2. The merged specialist findings from Step 3.56 (so it knows what was already caught)
-3. The git diff command
-
-Prompt: "You are a red team reviewer. The code has already been reviewed by N specialists
-who found the following issues: {merged findings summary}. Your job is to find what they
-MISSED. Read the checklist, run `git diff origin/<base>`, and look for gaps.
-Output findings as JSON objects (same schema as the specialists). Focus on cross-cutting
-concerns, integration boundary issues, and failure modes that specialist checklists
-don't cover."
-
-If the Red Team finds additional issues, merge them into the findings list before
-the Fix-First flow (item 4). Red Team findings are tagged with `"specialist":"red-team"`.
-
-If the Red Team returns NO FINDINGS, note: "Red Team review: no additional issues found."
-If the Red Team subagent fails or times out, skip silently and continue.
-
-### Step 3.57: Cross-review finding dedup
-
-Before classifying findings, check if any were previously skipped by the user in a prior review on this branch.
-
-```bash
-~/.claude/skills/rstack/bin/rstack-review-read
-```
-
-Parse the output: only lines BEFORE `---CONFIG---` are JSONL entries (the output also contains `---CONFIG---` and `---HEAD---` footer sections that are not JSONL — ignore those).
-
-For each JSONL entry that has a `findings` array:
-1. Collect all fingerprints where `action: "skipped"`
-2. Note the `commit` field from that entry
-
-If skipped fingerprints exist, get the list of files changed since that review:
-
-```bash
-git diff --name-only <prior-review-commit> HEAD
-```
-
-For each current finding (from both the checklist pass (Step 3.5) and specialist review (Step 3.55-3.56)), check:
-- Does its fingerprint match a previously skipped finding?
-- Is the finding's file path NOT in the changed-files set?
-
-If both conditions are true: suppress the finding. It was intentionally skipped and the relevant code hasn't changed.
-
-Print: "Suppressed N findings from prior reviews (previously skipped by user)"
-
-**Only suppress `skipped` findings — never `fixed` or `auto-fixed`** (those might regress and should be re-checked).
-
-If no prior reviews exist or none have a `findings` array, skip this step silently.
-
-Output a summary header: `Pre-Landing Review: N issues (X critical, Y informational)`
-
-4. **Classify each finding from both the checklist pass and specialist review (Step 3.55-3.56) as AUTO-FIX or ASK** per the Fix-First Heuristic in
-   checklist.md. Critical findings lean toward ASK; informational lean toward AUTO-FIX.
-
-5. **Auto-fix all AUTO-FIX items.** Apply each fix. Output one line per fix:
-   `[AUTO-FIXED] [file:line] Problem → what you did`
-
-6. **If ASK items remain,** present them in ONE AskUserQuestion:
-   - List each with number, severity, problem, recommended fix
-   - Per-item options: A) Fix  B) Skip
-   - Overall RECOMMENDATION
-   - If 3 or fewer ASK items, you may use individual AskUserQuestion calls instead
-
-7. **After all fixes (auto + user-approved):**
-   - If ANY fixes were applied: commit fixed files by name (`git add <fixed-files> && git commit -m "fix: pre-landing review fixes"`), then **STOP** and tell the user to run `/ship` again to re-test.
-   - If no fixes applied (all ASK items skipped, or no issues found): continue to Step 4.
-
-8. Output summary: `Pre-Landing Review: N issues — M auto-fixed, K asked (J fixed, L skipped)`
-
-   If no issues found: `Pre-Landing Review: No issues found.`
-
-9. Persist the review result to the review log:
-```bash
-~/.claude/skills/rstack/bin/rstack-review-log '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"specialists":SPECIALISTS_JSON,"findings":FINDINGS_JSON,"commit":"'"$(git rev-parse --short HEAD)"'","via":"ship"}'
-```
-Substitute TIMESTAMP (ISO 8601), STATUS ("clean" if no issues, "issues_found" otherwise),
-and N values from the summary counts above. The `via:"ship"` distinguishes from standalone `/review` runs.
-- `quality_score` = the PR Quality Score computed in Step 3.56 (e.g., 7.5). If specialists were skipped (small diff), use `10.0`
-- `specialists` = the per-specialist stats object compiled in Step 3.56. Each specialist that was considered gets an entry: `{"dispatched":true/false,"findings":N,"critical":N,"informational":N}` if dispatched, or `{"dispatched":false,"reason":"scope|gated"}` if skipped. Example: `{"testing":{"dispatched":true,"findings":2,"critical":0,"informational":2},"security":{"dispatched":false,"reason":"scope"}}`
-- `findings` = array of per-finding records. For each finding (from checklist pass and specialists), include: `{"fingerprint":"path:line:category","severity":"CRITICAL|INFORMATIONAL","action":"ACTION"}`. ACTION is `"auto-fixed"`, `"fixed"` (user approved), or `"skipped"` (user chose Skip).
 
 Save the review output — it goes into the PR body in Step 8.
 
@@ -1459,128 +1209,25 @@ For each classified comment:
 
 ---
 
-## Step 3.8: Adversarial review (always-on)
+## Step 3.8: Optional Adversarial Review
 
-Every diff gets adversarial review from both Claude and Codex. LOC is not a proxy for risk — a 5-line auth change can be critical.
+Do not send the diff to any external reviewer automatically. If the user
+explicitly asks for adversarial review, let them choose a local reviewer CLI and
+run only that approved command.
 
-**Detect diff size and tool availability:**
-
-```bash
-DIFF_INS=$(git diff origin/<base> --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
-DIFF_DEL=$(git diff origin/<base> --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
-DIFF_TOTAL=$((DIFF_INS + DIFF_DEL))
-which codex 2>/dev/null && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-# Legacy opt-out — only gates Codex passes, Claude always runs
-OLD_CFG=$(~/.claude/skills/rstack/bin/rstack-config get codex_reviews 2>/dev/null || true)
-echo "DIFF_SIZE: $DIFF_TOTAL"
-echo "OLD_CFG: ${OLD_CFG:-not_set}"
-```
-
-If `OLD_CFG` is `disabled`: skip Codex passes only. Claude adversarial subagent still runs (it's free and fast). Jump to the "Claude adversarial subagent" section.
-
-**User override:** If the user explicitly requested "full review", "structured review", or "P1 gate", also run the Codex structured review regardless of diff size.
-
----
-
-### Claude adversarial subagent (always runs)
-
-Dispatch via the Agent tool. The subagent has fresh context — no checklist bias from the structured review. This genuine independence catches things the primary reviewer is blind to.
-
-Subagent prompt:
-"Read the diff for this branch with `git diff origin/<base>`. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production. Look for: edge cases, race conditions, security holes, resource leaks, failure modes, silent data corruption, logic errors that produce wrong results silently, error handling that swallows failures, and trust boundary violations. Be adversarial. Be thorough. No compliments — just the problems. For each finding, classify as FIXABLE (you know how to fix it) or INVESTIGATE (needs human judgment)."
-
-Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. **FIXABLE findings** flow into the same Fix-First pipeline as the structured review. **INVESTIGATE findings** are presented as informational.
-
-If the subagent fails or times out: "Claude adversarial subagent unavailable. Continuing."
-
----
-
-### Codex adversarial challenge (always runs when available)
-
-If Codex is available AND `OLD_CFG` is NOT `disabled`:
+If the user opts in:
+1. Write a prompt to `~/.rstack/tmp/ship-adversarial-review-prompt.txt` asking the reviewer to find production failure modes, trust-boundary issues, race conditions, and silent data corruption risks in `git diff origin/<base>`.
+2. Write stderr to `~/.rstack/tmp/ship-adversarial-review-stderr.txt`.
+3. Present the full output under `ADVERSARIAL REVIEW (<provider>):`.
+4. Treat FIXABLE findings like any other review findings; treat INVESTIGATE findings as informational.
+5. Persist the pass locally:
 
 ```bash
-TMPERR_ADV=$(mktemp /tmp/codex-adv-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\n\nReview the changes on this branch against the base branch. Run git diff origin/<base> to see the diff. Your job is to find ways this code will fail in production. Think like an attacker and a chaos engineer. Find edge cases, race conditions, security holes, resource leaks, failure modes, and silent data corruption paths. Be adversarial. Be thorough. No compliments — just the problems." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached 2>"$TMPERR_ADV"
+mkdir -p ~/.rstack
+echo '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"optional","commit":"'"$(git rev-parse --short HEAD)"'"}' >> ~/.rstack/review-log.jsonl
 ```
 
-Set the Bash tool's `timeout` parameter to `300000` (5 minutes). Do NOT use the `timeout` shell command — it doesn't exist on macOS. After the command completes, read stderr:
-```bash
-cat "$TMPERR_ADV"
-```
-
-Present the full output verbatim. This is informational — it never blocks shipping.
-
-**Error handling:** All errors are non-blocking — adversarial review is a quality enhancement, not a prerequisite.
-- **Auth failure:** If stderr contains "auth", "login", "unauthorized", or "API key": "Codex authentication failed. Run \`codex login\` to authenticate."
-- **Timeout:** "Codex timed out after 5 minutes."
-- **Empty response:** "Codex returned no response. Stderr: <paste relevant error>."
-
-**Cleanup:** Run `rm -f "$TMPERR_ADV"` after processing.
-
-If Codex is NOT available: "Codex CLI not found — running Claude adversarial only. Install Codex for cross-model coverage: `npm install -g @openai/codex`"
-
----
-
-### Codex structured review (large diffs only, 200+ lines)
-
-If `DIFF_TOTAL >= 200` AND Codex is available AND `OLD_CFG` is NOT `disabled`:
-
-```bash
-TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-cd "$_REPO_ROOT"
-codex review "IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\n\nReview the diff against the base branch." --base <base> -c 'model_reasoning_effort="high"' --enable web_search_cached 2>"$TMPERR"
-```
-
-Set the Bash tool's `timeout` parameter to `300000` (5 minutes). Do NOT use the `timeout` shell command — it doesn't exist on macOS. Present output under `CODEX SAYS (code review):` header.
-Check for `[P1]` markers: found → `GATE: FAIL`, not found → `GATE: PASS`.
-
-If GATE is FAIL, use AskUserQuestion:
-```
-Codex found N critical issues in the diff.
-
-A) Investigate and fix now (recommended)
-B) Continue — review will still complete
-```
-
-If A: address the findings. After fixing, re-run tests (Step 3) since code has changed. Re-run `codex review` to verify.
-
-Read stderr for errors (same error handling as Codex adversarial above).
-
-After stderr: `rm -f "$TMPERR"`
-
-If `DIFF_TOTAL < 200`: skip this section silently. The Claude + Codex adversarial passes provide sufficient coverage for smaller diffs.
-
----
-
-### Persist the review result
-
-After all passes complete, persist:
-```bash
-~/.claude/skills/rstack/bin/rstack-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
-```
-Substitute: STATUS = "clean" if no findings across ALL passes, "issues_found" if any pass found issues. SOURCE = "both" if Codex ran, "claude" if only Claude subagent ran. GATE = the Codex structured review gate result ("pass"/"fail"), "skipped" if diff < 200, or "informational" if Codex was unavailable. If all passes failed, do NOT persist.
-
----
-
-### Cross-model synthesis
-
-After all passes complete, synthesize findings across all sources:
-
-```
-ADVERSARIAL REVIEW SYNTHESIS (always-on, N lines):
-════════════════════════════════════════════════════════════
-  High confidence (found by multiple sources): [findings agreed on by >1 pass]
-  Unique to Claude structured review: [from earlier step]
-  Unique to Claude adversarial: [from subagent]
-  Unique to Codex: [from codex adversarial or code review, if ran]
-  Models used: Claude structured ✓  Claude adversarial ✓/✗  Codex ✓/✗
-════════════════════════════════════════════════════════════
-```
-
-High-confidence findings (agreed on by multiple sources) should be prioritized for fixes.
+If the user does not opt in, skip this section silently.
 
 ---
 
@@ -1745,7 +1392,7 @@ Save this summary — it goes into the PR body in Step 8.
 git commit -m "$(cat <<'EOF'
 chore: bump version and changelog (vX.Y.Z.W)
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: RStack <noreply@local>
 EOF
 )"
 ```
@@ -1867,7 +1514,7 @@ you missed it.>
 - [x] All Rails tests pass (N runs, 0 failures)
 - [x] All Vitest tests pass (N tests)
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Generated with RStack
 ```
 
 **If GitHub:**
@@ -1923,7 +1570,7 @@ If Step 8.5 created a docs commit, re-edit the PR/MR body to include the latest 
 - **Never skip tests.** If tests fail, stop.
 - **Never skip the pre-landing review.** If checklist.md is unreadable, stop.
 - **Never force push.** Use regular `git push` only.
-- **Never ask for trivial confirmations** (e.g., "ready to push?", "create PR?"). DO stop for: version bumps (MINOR/MAJOR), pre-landing review findings (ASK items), and Codex structured review [P1] findings (large diffs only).
+- **Never ask for trivial confirmations** (e.g., "ready to push?", "create PR?"). DO stop for: version bumps (MINOR/MAJOR), pre-landing review findings (ASK items), and any user-approved external review findings that require judgment.
 - **Always use the 4-digit version format** from the VERSION file.
 - **Date format in CHANGELOG:** `YYYY-MM-DD`
 - **Split commits for bisectability** — each commit = one logical change.
