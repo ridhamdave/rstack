@@ -6,6 +6,7 @@ SKILLS_ROOT="$REPO_ROOT/skills"
 HOST="auto"
 PREFIX_MODE="prefixed"
 CUSTOM_DIR=""
+SUPPORTED_SKILLS_FILE="$REPO_ROOT/config/supported-skills.txt"
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ skills directory.
 Defaults:
   --host auto      Detect installed hosts and install to any found
   --prefix         Install as rstack-<skill> to avoid collisions
+  skill set        Install the repo's shipped lean set
 
 Examples:
   ./setup
@@ -74,11 +76,44 @@ case "$HOST" in
 esac
 
 list_skills() {
-  find "$SKILLS_ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
-    name="$(basename "$dir")"
-    [ -f "$dir/SKILL.md" ] || continue
-    printf '%s\n' "$name"
-  done | sort
+  if [ ! -f "$SUPPORTED_SKILLS_FILE" ]; then
+    echo "Missing supported skills file: $SUPPORTED_SKILLS_FILE" >&2
+    exit 1
+  fi
+
+  while read -r skill; do
+    case "$skill" in
+      ''|\#*) continue ;;
+    esac
+    if [ ! -f "$SKILLS_ROOT/$skill/SKILL.md" ]; then
+      echo "Configured supported skill missing from repo: $skill" >&2
+      exit 1
+    fi
+    printf '%s\n' "$skill"
+  done < "$SUPPORTED_SKILLS_FILE"
+}
+
+remove_unsupported_links() {
+  target_dir="$1"
+  [ -d "$target_dir" ] || return 0
+
+  tmp_supported="$(mktemp)"
+  list_skills > "$tmp_supported"
+
+  find "$target_dir" -mindepth 1 -maxdepth 1 -type l | while read -r link_path; do
+    target_name="$(basename "$link_path")"
+    skill_name="$target_name"
+    case "$skill_name" in
+      rstack-*) skill_name="${skill_name#rstack-}" ;;
+    esac
+
+    if ! grep -qx "$skill_name" "$tmp_supported"; then
+      rm -f "$link_path"
+      printf 'removed %-27s (not in lean supported set)\n' "$target_name"
+    fi
+  done
+
+  rm -f "$tmp_supported"
 }
 
 install_into_dir() {
@@ -149,9 +184,11 @@ detect_targets() {
 echo "Installing RStack from $REPO_ROOT"
 echo "Host mode: $HOST"
 echo "Skill naming: $([ "$PREFIX_MODE" = "prefixed" ] && echo 'rstack-<skill>' || echo '<skill>')"
+echo "Install surface: lean supported set"
 
 while read -r target; do
   [ -n "$target" ] || continue
+  remove_unsupported_links "$target"
   install_into_dir "$target"
 done <<EOF
 $(detect_targets)

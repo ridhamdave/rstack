@@ -17,40 +17,20 @@ RStack is a markdown-first skill pack. Each skill lives in `skills/<name>/SKILL.
 - Use `.context/` for scratch notes shared across agents in this workspace.
 - Do not write hidden data outside those locations unless the user explicitly asks.
 
-## Available Skills
+## Supported Skills
 
-- `autoplan`
-- `benchmark`
-- `browse`
-- `canary`
-- `careful`
-- `checkpoint`
-- `codex`
-- `cso`
+RStack only ships this lean skill set:
+
+- `office-hours`
+- `plan-ceo-review`
+- `plan-eng-review`
 - `design-consultation`
-- `design-html`
 - `design-review`
-- `design-shotgun`
-- `devex-review`
-- `document-release`
+- `ship`
+- `qa`
+- `investigate`
+- `careful`
 - `freeze`
 - `guard`
-- `health`
-- `investigate`
-- `land-and-deploy`
-- `learn`
-- `office-hours`
-- `open-browser`
-- `pair-agent`
-- `plan-ceo-review`
-- `plan-design-review`
-- `plan-devex-review`
-- `plan-eng-review`
-- `qa`
-- `qa-only`
-- `retro`
-- `review`
-- `setup-browser-cookies`
-- `setup-deploy`
-- `ship`
 - `unfreeze`
+- `setup-deploy`
